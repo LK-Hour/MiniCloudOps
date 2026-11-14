@@ -1,0 +1,33 @@
+# Demonstration thresholds from docs/MiniCloudOps.md §7.3 — not production values.
+groups:
+  - name: miniops
+    rules:
+      - alert: HighContainerCpu
+        expr: sum by (name) (rate(container_cpu_usage_seconds_total{name!=""}[1m])) * 100 > 80
+        for: 1m
+        labels: { severity: warning }
+        annotations:
+          summary: "Container {{ $labels.name }} CPU above 80%"
+
+      - alert: HighContainerMemory
+        expr: |
+          (container_memory_working_set_bytes{name!=""}
+            / on (name) (container_spec_memory_limit_bytes{name!=""} > 0)) * 100 > 85
+        for: 1m
+        labels: { severity: warning }
+        annotations:
+          summary: "Container {{ $labels.name }} memory above 85% of its limit"
+
+      - alert: HighHostMemory
+        expr: (1 - node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes) * 100 > 85
+        for: 1m
+        labels: { severity: warning }
+        annotations:
+          summary: "Host memory above 85%"
+
+      - alert: MiniOpsServiceDown
+        expr: up{job="miniops-services"} == 0
+        for: 30s
+        labels: { severity: critical }
+        annotations:
+          summary: "{{ $labels.instance }} is not responding to scrapes"

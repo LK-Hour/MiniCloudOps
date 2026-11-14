@@ -1,0 +1,196 @@
+# MiniOps — full local stack.
+#   docker compose up -d --build     build from source and start
+#   docker compose pull && up -d     run the images published to GHCR
+name: miniops
+
+x-service-defaults: &service-defaults
+  restart: unless-stopped
+  networks: [internal]
+  depends_on:
+    postgres:
+      condition: service_healthy
+
+services:
+  # ---------- Business microservices (internal only) ----------
+  target-service:
+    <<: *service-defaults
+    image: ghcr.io/${GHCR_OWNER:-miniops}/miniops-target-service:${IMAGE_TAG:-latest}
+    build: ./services/target-service
+    environment:
+      SERVICE_NAME: target-service
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      DATABASE_URL: postgresql+psycopg://${TARGET_DB_USER}:${TARGET_DB_PASSWORD}@postgres:5432/target_db
+
+  monitoring-service:
+    <<: *service-defaults
+    image: ghcr.io/${GHCR_OWNER:-miniops}/miniops-monitoring-service:${IMAGE_TAG:-latest}
+    build: ./services/monitoring-service
+    environment:
+      SERVICE_NAME: monitoring-service
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      DATABASE_URL: postgresql+psycopg://${MONITORING_DB_USER}:${MONITORING_DB_PASSWORD}@postgres:5432/monitoring_db
+      TARGET_SERVICE_URL: http://target-service:8000
+      INCIDENT_SERVICE_URL: http://incident-service:8000
+      PROMETHEUS_URL: http://prometheus:9090
+      DEFAULT_CHECK_INTERVAL_SECONDS: ${DEFAULT_CHECK_INTERVAL_SECONDS:-30}
+      FAILURE_THRESHOLD: ${FAILURE_THRESHOLD:-3}
+      RESPONSE_TIME_THRESHOLD_MS: ${RESPONSE_TIME_THRESHOLD_MS:-2000}
+
+  incident-service:
+    <<: *service-defaults
+    image: ghcr.io/${GHCR_OWNER:-miniops}/miniops-incident-service:${IMAGE_TAG:-latest}
+    build: ./services/incident-service
+    environment:
+      SERVICE_NAME: incident-service
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      DATABASE_URL: postgresql+psycopg://${INCIDENT_DB_USER}:${INCIDENT_DB_PASSWORD}@postgres:5432/incident_db
+      NOTIFICATION_SERVICE_URL: http://notification-service:8000
+
+  notification-service:
+    <<: *service-defaults
+    image: ghcr.io/${GHCR_OWNER:-miniops}/miniops-notification-service:${IMAGE_TAG:-latest}
+    build: ./services/notification-service
+    environment:
+      SERVICE_NAME: notification-service
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      DATABASE_URL: postgresql+psycopg://${NOTIFICATION_DB_USER}:${NOTIFICATION_DB_PASSWORD}@postgres:5432/notification_db
+
+  # ---------- Edge (published to localhost) ----------
+  gateway:
+    image: nginx:1.27-alpine
+    restart: unless-stopped
+    volumes:
+      - ./gateway/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+    ports:
+      - "${GATEWAY_PORT:-8080}:80"
+    networks: [internal, public]
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1/health"]
+      interval: 15s
+      timeout: 3s
+      retries: 3
+
+  frontend:
+    image: ghcr.io/${GHCR_OWNER:-miniops}/miniops-frontend:${IMAGE_TAG:-latest}
+    build: ./frontend
+    restart: unless-stopped
+    ports:
+      - "${FRONTEND_PORT:-3000}:80"
+    networks: [public]
+    depends_on: [gateway]
+
+  # ---------- Data ----------
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      TARGET_DB_USER: ${TARGET_DB_USER}
+      TARGET_DB_PASSWORD: ${TARGET_DB_PASSWORD}
+      MONITORING_DB_USER: ${MONITORING_DB_USER}
+      MONITORING_DB_PASSWORD: ${MONITORING_DB_PASSWORD}
+      INCIDENT_DB_USER: ${INCIDENT_DB_USER}
+      INCIDENT_DB_PASSWORD: ${INCIDENT_DB_PASSWORD}
+      NOTIFICATION_DB_USER: ${NOTIFICATION_DB_USER}
+      NOTIFICATION_DB_PASSWORD: ${NOTIFICATION_DB_PASSWORD}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./database/init.sh:/docker-entrypoint-initdb.d/init.sh:ro
+    networks: [internal]   # never published to the host
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER}"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  # ---------- Observability ----------
+  prometheus:
+    image: prom/prometheus:v2.55.1
+    restart: unless-stopped
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.retention.time=7d
+    volumes:
+      - ./infrastructure/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./infrastructure/prometheus/alert-rules.yml:/etc/prometheus/alert-rules.yml:ro
+      - prometheus-data:/prometheus
+    ports:
+      - "${PROMETHEUS_PORT:-9090}:9090"
+    networks: [internal, public]
+
+  grafana:
+    image: grafana/grafana:11.3.0
+    restart: unless-stopped
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+    volumes:
+      - ./infrastructure/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./infrastructure/grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - grafana-data:/var/lib/grafana
+    ports:
+      - "${GRAFANA_PORT:-3001}:3000"
+    networks: [internal, public]
+    depends_on: [prometheus, loki]
+
+  loki:
+    image: grafana/loki:3.2.1
+    restart: unless-stopped
+    command: -config.file=/etc/loki/loki-config.yml
+    volumes:
+      - ./infrastructure/loki/loki-config.yml:/etc/loki/loki-config.yml:ro
+      - loki-data:/loki
+    networks: [internal]
+
+  alloy:
+    image: grafana/alloy:v1.4.3
+    restart: unless-stopped
+    command: run --server.http.listen-addr=0.0.0.0:12345 --storage.path=/var/lib/alloy/data /etc/alloy/config.alloy
+    volumes:
+      - ./infrastructure/alloy/config.alloy:/etc/alloy/config.alloy:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    networks: [internal]
+    depends_on: [loki]
+
+  cadvisor:
+    image: gcr.io/cadvisor/cadvisor:v0.49.1
+    restart: unless-stopped
+    privileged: true
+    devices:
+      - /dev/kmsg
+    volumes:
+      - /:/rootfs:ro
+      - /var/run:/var/run:ro
+      - /sys:/sys:ro
+      - /var/lib/docker/:/var/lib/docker:ro
+      - /dev/disk/:/dev/disk:ro
+    networks: [internal]
+
+  node-exporter:
+    image: prom/node-exporter:v1.8.2
+    restart: unless-stopped
+    command:
+      - --path.rootfs=/host
+    pid: host
+    volumes:
+      - /:/host:ro,rslave
+    networks: [internal]
+
+  # ---------- Demo target to monitor ----------
+  demo-app:
+    image: nginx:1.27-alpine
+    restart: "no"
+    networks: [internal]
+    profiles: [demo]
+
+networks:
+  internal:
+  public:
+
+volumes:
+  postgres-data:
+  prometheus-data:
+  grafana-data:
+  loki-data:

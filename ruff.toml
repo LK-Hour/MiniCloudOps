@@ -1,0 +1,9 @@
+# Shared lint rules for every Python service.
+target-version = "py312"
+line-length = 110
+
+[lint]
+select = ["E", "F", "W", "I", "B", "UP"]
+
+[lint.isort]
+known-first-party = ["app"]
