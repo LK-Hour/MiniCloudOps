@@ -1,28 +1,49 @@
 """Request/response models for the Target Management API."""
 from datetime import datetime
-from typing import Literal
+from typing import Annotated, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, HttpUrl
+from pydantic import BaseModel, ConfigDict, Field, HttpUrl, StringConstraints
 
-TargetType = Literal["http", "docker"]
+# Version 1 monitors HTTP endpoints only. New check types get added here and in the Monitoring Service.
+TargetType = Literal["http"]
+TargetStatus = Literal["UP", "DOWN", "UNKNOWN"]
+TargetName = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=120)]
+CheckInterval = Annotated[int, Field(ge=10, le=3600, description="Seconds between health checks")]
 
 
 class TargetCreate(BaseModel):
-    name: str = Field(min_length=1, max_length=120)
-    # TODO(security): reject loopback, link-local, metadata (169.254.169.254) and other
-    # internal addresses before saving, to prevent SSRF through monitoring targets.
+    model_config = ConfigDict(
+        json_schema_extra={
+            "example": {
+                "name": "Example API",
+                "target_url": "http://demo-app/",
+                "type": "http",
+                "check_interval": 30,
+                "enabled": True,
+            }
+        }
+    )
+
+    name: TargetName
+    # Syntax is checked here; SSRF rules (internal hosts and addresses) are checked in the route.
     target_url: HttpUrl
     type: TargetType = "http"
-    check_interval: int = Field(default=30, ge=10, le=3600)
+    check_interval: CheckInterval = 30
     enabled: bool = True
 
 
 class TargetUpdate(BaseModel):
-    name: str | None = Field(default=None, min_length=1, max_length=120)
+    """Every field is optional; only the fields sent are changed."""
+
+    name: TargetName | None = None
     target_url: HttpUrl | None = None
     type: TargetType | None = None
-    check_interval: int | None = Field(default=None, ge=10, le=3600)
+    check_interval: CheckInterval | None = None
     enabled: bool | None = None
+
+
+class TargetStatusUpdate(BaseModel):
+    status: TargetStatus
 
 
 class TargetRead(BaseModel):
@@ -31,9 +52,9 @@ class TargetRead(BaseModel):
     id: str
     name: str
     target_url: str
-    type: TargetType
+    type: str
     check_interval: int
     enabled: bool
-    status: str
+    status: TargetStatus
     created_at: datetime
     updated_at: datetime

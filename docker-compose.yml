@@ -20,6 +20,7 @@ services:
       SERVICE_NAME: target-service
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
       DATABASE_URL: postgresql+psycopg://${TARGET_DB_USER}:${TARGET_DB_PASSWORD}@postgres:5432/target_db
+      SSRF_ALLOW_PRIVATE_NETWORKS: ${SSRF_ALLOW_PRIVATE_NETWORKS:-true}
 
   monitoring-service:
     <<: *service-defaults

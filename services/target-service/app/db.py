@@ -9,7 +9,8 @@ from app.config import get_settings
 
 logger = logging.getLogger(__name__)
 
-engine = create_engine(get_settings().database_url, pool_pre_ping=True)
+# hide_parameters keeps query values (user data) out of error messages and logs.
+engine = create_engine(get_settings().database_url, pool_pre_ping=True, hide_parameters=True)
 SessionLocal = sessionmaker(bind=engine, autoflush=False, expire_on_commit=False)
 
 

@@ -7,7 +7,7 @@ from app.schemas import NotificationCreate, NotificationRead
 router = APIRouter(prefix="/api/v1/notifications", tags=["notifications"])
 
 
-@router.get("/", response_model=list[NotificationRead])
+@router.get("", response_model=list[NotificationRead])
 def list_notifications(unread_only: bool = False):
     raise not_implemented()
 
@@ -17,7 +17,7 @@ def get_notification(notification_id: str):
     raise not_implemented()
 
 
-@router.post("/", response_model=NotificationRead, status_code=status.HTTP_201_CREATED)
+@router.post("", response_model=NotificationRead, status_code=status.HTTP_201_CREATED)
 def create_notification(payload: NotificationCreate):
     raise not_implemented()
 

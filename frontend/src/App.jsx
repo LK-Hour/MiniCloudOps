@@ -2,9 +2,9 @@ import { useEffect, useState } from "react";
 import { apiGet } from "./api.js";
 
 const PANELS = [
-  { key: "targets", title: "Targets", path: "/targets/", render: (t) => `${t.name} — ${t.status}` },
-  { key: "incidents", title: "Incidents", path: "/incidents/", render: (i) => `[${i.severity}] ${i.title} — ${i.status}` },
-  { key: "notifications", title: "Notifications", path: "/notifications/", render: (n) => n.title },
+  { key: "targets", title: "Targets", path: "/targets", render: (t) => `${t.name} — ${t.status}` },
+  { key: "incidents", title: "Incidents", path: "/incidents", render: (i) => `[${i.severity}] ${i.title} — ${i.status}` },
+  { key: "notifications", title: "Notifications", path: "/notifications", render: (n) => n.title },
 ];
 
 function Panel({ title, path, render }) {

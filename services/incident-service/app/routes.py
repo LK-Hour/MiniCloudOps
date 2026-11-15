@@ -13,7 +13,7 @@ from app.schemas import IncidentCreate, IncidentEventRead, IncidentRead, Inciden
 router = APIRouter(prefix="/api/v1/incidents", tags=["incidents"])
 
 
-@router.get("/", response_model=list[IncidentRead])
+@router.get("", response_model=list[IncidentRead])
 def list_incidents(status_filter: str | None = None):
     raise not_implemented()
 
@@ -23,7 +23,7 @@ def get_incident(incident_id: str):
     raise not_implemented()
 
 
-@router.post("/", response_model=IncidentRead, status_code=status.HTTP_201_CREATED)
+@router.post("", response_model=IncidentRead, status_code=status.HTTP_201_CREATED)
 async def create_incident(payload: IncidentCreate):
     raise not_implemented()
 

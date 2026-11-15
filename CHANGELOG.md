@@ -14,3 +14,12 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versioning: [S
 - Prometheus alert rules and a provisioned Grafana overview dashboard.
 - GitHub Actions CI/CD: lint, test, build, and publish to GHCR.
 - README, CONTRIBUTING, LICENSE (MIT), CODE_OF_CONDUCT, SECURITY.
+- Target Service: register, list (filter by `enabled`, paginate), get, update, delete, enable and disable targets. Names are unique (case-insensitive).
+- Target Service: SSRF protection for target URLs. Blocks loopback, link-local and cloud-metadata addresses, MiniOps's own hosts and their IPs, and URLs with credentials. `SSRF_ALLOW_PRIVATE_NETWORKS` controls private ranges.
+- Target Service: internal `PATCH /api/v1/targets/{id}/status` for the Monitoring Service. The gateway blocks it from outside.
+- All services: `ApiError` for errors with field details, and a standard `503` response when the database is unreachable.
+
+### Fixed
+- List and create endpoints work without a trailing slash. Before, `/api/v1/targets` redirected to an address without the gateway port.
+- The gateway returned two `X-Correlation-ID` headers. It now returns one.
+- Gateway 404 and backend-down (503) responses use the standard JSON error body.

@@ -4,7 +4,7 @@
 
 Register your applications, watch their health and resource use, and manage the resulting incidents from one dashboard. MiniOps is built from four FastAPI microservices, runs entirely on localhost with Docker Compose, and is tested and published by a GitHub Actions pipeline.
 
-> Status: **Phase 2 – Foundation.** The services start, log, expose metrics and serve their API contracts. Endpoints return `501 Not Implemented` until each service is built (Phase 3). See the [roadmap](#roadmap).
+> Status: **Phase 3 – Microservices.** The Target Service is implemented. The monitoring, incident and notification endpoints still return `501 Not Implemented`. See the [roadmap](#roadmap).
 
 The full specification is in [docs/MiniCloudOps.md](docs/MiniCloudOps.md).
 
@@ -153,6 +153,11 @@ cd frontend && npm install && npm run dev       # http://localhost:5173
 - **Correlation IDs:** the `X-Correlation-ID` header is accepted, generated when missing, returned in the response and forwarded on outbound calls.
 - **Errors:** `{"error": {"code", "message", "details", "correlation_id"}}`.
 - **Config:** environment variables only. No secrets in code or logs.
+- **Internal endpoints:** `PATCH /api/v1/targets/{id}/status` is for the Monitoring Service only. The gateway returns 404 for it.
+
+### Target URL safety (SSRF)
+
+The Target Service refuses URLs the platform should never call: loopback, link-local and cloud metadata (`169.254.169.254`), MiniOps's own containers (by name or IP), and URLs with embedded credentials. Private addresses are allowed by default because apps in Docker Compose use them. Set `SSRF_ALLOW_PRIVATE_NETWORKS=false` to allow public addresses only. The rules are in [services/target-service/app/url_safety.py](services/target-service/app/url_safety.py).
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for branching, commits and pull requests.
 
