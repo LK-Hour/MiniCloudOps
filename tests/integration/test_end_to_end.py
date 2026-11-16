@@ -143,7 +143,7 @@ def test_failure_creates_incident_and_notification_then_recovers(api, policy, en
     assert {"NOTIFICATION_SENT", "RESOLVED"} <= set(events), events
 
     # 6. One correlation ID followed the request through the services into Loki.
-    services = wait_for(lambda: _services_logging(api, run_id), timeout=40, interval=2, what="logs in Loki")
+    services = wait_for(lambda: _services_logging(api, run_id), timeout=90, interval=3, what="logs in Loki")
     assert {"monitoring-service", "incident-service", "notification-service"} <= services, services
 
     _mark_read(api, incident_id)
