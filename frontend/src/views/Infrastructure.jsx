@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import { motion } from "framer-motion";
 import { CloudOff, Cpu, HardDrive, MemoryStick, Server, Timer } from "lucide-react";
 import { useInfrastructure } from "../api/hooks.js";
+import { HostTimeSeries } from "./TimeSeriesPanels.jsx";
 import { Badge, Card, ErrorState, Meter, Segmented, Skeleton, StatusDot, ease } from "../components/ui.jsx";
 import { bytes, clockTime, duration, pct } from "../lib/format.js";
 
@@ -66,6 +67,10 @@ export default function Infrastructure() {
           <span className="muted small">Updated {clockTime(data.collected_at)}</span>
         </HostTile>
       </div>
+
+      <Card title="Usage over time" variants={rise}>
+        <HostTimeSeries withContainers />
+      </Card>
 
       <div className="grid-2">
         <Card title="Alerts" variants={rise} action={<Badge tone={firing.length ? "danger" : "success"}>{firing.length} firing</Badge>}>

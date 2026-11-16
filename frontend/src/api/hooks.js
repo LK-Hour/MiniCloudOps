@@ -267,3 +267,31 @@ export function useMarkRead() {
     onSettled: () => client.invalidateQueries({ queryKey: keys.notifications }),
   });
 }
+
+// --- time series --------------------------------------------------------------------------------
+
+/** Checks grouped into time buckets. Without `id`: all targets (overall + per target). */
+export const useCheckSeries = (minutes, id) =>
+  useQuery({
+    queryKey: ["monitoring", "timeseries", id ?? "all", minutes],
+    queryFn: ({ signal }) => api(`/monitoring/${id ? `targets/${id}/` : ""}timeseries?minutes=${minutes}`, { signal }),
+    refetchInterval: useInterval(2),
+    placeholderData: (previous) => previous,
+  });
+
+export const useInfrastructureHistory = (minutes) =>
+  useQuery({
+    queryKey: ["monitoring", "infrastructure", "history", minutes],
+    queryFn: ({ signal }) => api(`/monitoring/infrastructure/history?minutes=${minutes}`, { signal }),
+    refetchInterval: useInterval(3),
+    placeholderData: (previous) => previous,
+  });
+
+export const useResourceHistory = (id, minutes) =>
+  useQuery({
+    queryKey: ["monitoring", "resources", id, minutes],
+    queryFn: ({ signal }) => api(`/monitoring/targets/${id}/resources?minutes=${minutes}`, { signal }),
+    enabled: Boolean(id),
+    refetchInterval: useInterval(3),
+    placeholderData: (previous) => previous,
+  });

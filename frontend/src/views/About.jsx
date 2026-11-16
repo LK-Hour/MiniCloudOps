@@ -1,5 +1,5 @@
 import { motion } from "framer-motion";
-import { Activity, ArrowRight, BookOpen, ExternalLink, GitCommit } from "lucide-react";
+import { ArrowRight, BookOpen, ExternalLink, GitCommit } from "lucide-react";
 import { SERVICES, useInfrastructure, useSpecs } from "../api/hooks.js";
 import { Badge, Card, StatusDot, ease } from "../components/ui.jsx";
 import { dateTime } from "../lib/format.js";
@@ -56,9 +56,7 @@ export default function About({ go }) {
   return (
     <motion.div className="stack" initial="initial" animate="animate" variants={{ animate: { transition: { staggerChildren: 0.05 } } }}>
       <motion.section variants={rise} className="about-hero">
-        <span className="about-mark">
-          <Activity size={26} strokeWidth={2.4} />
-        </span>
+        <img className="about-mark about-logo" src="/assets/logo-256.png" alt="MiniOps logo" width="64" height="64" />
         <div className="about-copy">
           <h2>MiniOps</h2>
           <p>

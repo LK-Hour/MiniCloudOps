@@ -42,8 +42,8 @@ h3 {
 .brand-mark {
   width: 32px;
   height: 32px;
-  border-radius: 10px;
-  background: linear-gradient(135deg, #5be49b 0%, #00a76f 55%, #007867 100%);
+  border-radius: 22%;
+  object-fit: contain;
   box-shadow: 0 8px 16px -4px rgba(0, 167, 111, 0.4);
 }
 .env-chip {
@@ -538,4 +538,12 @@ kbd {
   .stat .stat-value {
     font-size: 24px;
   }
+}
+
+/* Image logo in the About hero: no tinted tile behind it. */
+.about-logo {
+  background: none;
+  border-radius: 22%;
+  object-fit: contain;
+  padding: 0;
 }

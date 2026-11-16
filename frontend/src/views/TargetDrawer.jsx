@@ -7,6 +7,7 @@ import { Drawer } from "../components/overlay.jsx";
 import { Button, ErrorState, Meter, Skeleton, StatusPill, Switch, ease } from "../components/ui.jsx";
 import { clockTime, dateTime, ms, timeAgo } from "../lib/format.js";
 import { useNow } from "../lib/hooks.js";
+import { TargetTimeSeries } from "./TimeSeriesPanels.jsx";
 import TargetForm from "./TargetForm.jsx";
 import { DeleteTargetDialog, useTargetActions } from "./Targets.jsx";
 
@@ -79,7 +80,12 @@ export default function TargetDrawer({ id, onClose, openIncident }) {
             </section>
 
             <section>
-              <h4 className="section-title">Container resources</h4>
+              <h4 className="section-title">Trends</h4>
+              <TargetTimeSeries id={id} />
+            </section>
+
+            <section>
+              <h4 className="section-title">Container resources (now)</h4>
               {status.isError && <ErrorState error={status.error} source="Monitoring Service" />}
               {s && !s.metrics_available && <p className="muted small">Metrics temporarily unavailable (Prometheus unreachable).</p>}
               {s && s.metrics_available && s.cpu_percent == null && s.memory_percent == null && (

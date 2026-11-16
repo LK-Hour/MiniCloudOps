@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { AnimatePresence, LayoutGroup, MotionConfig, motion } from "framer-motion";
 import {
-  Activity,
   Bell,
   BookOpen,
   FlaskConical,
@@ -101,9 +100,7 @@ function Sidebar({ page, go, badges, onNavigate }) {
   return (
     <div className="sidebar-inner">
       <a className="brand" href="#/overview" onClick={onNavigate}>
-        <span className="brand-mark">
-          <Activity size={16} strokeWidth={2.5} />
-        </span>
+        <img className="brand-mark" src="/assets/logo-256.png" alt="" width="32" height="32" />
         <span>MiniOps</span>
         <span className="env-chip" title="Environment">{window.location.hostname === "localhost" ? "local" : window.location.hostname}</span>
       </a>
@@ -178,6 +175,11 @@ export default function App() {
   }, []);
   const cycleTheme = useCallback(() => update({ theme: NEXT_THEME[settings.theme] }), [settings.theme, update]);
   useDesktopAlerts(openIncident);
+
+  // Deep link from alerts (Telegram, desktop): #/incidents/<id> opens that incident's drawer.
+  useEffect(() => {
+    if (route.page === "incidents" && /^[0-9a-f-]{36}$/i.test(route.sub ?? "")) openIncident(route.sub);
+  }, [route.page, route.sub, openIncident]);
 
   // Ctrl/⌘ K opens the palette; 1–9 switch pages when not typing.
   useEffect(() => {
@@ -292,7 +294,14 @@ export default function App() {
         </div>
 
         <TargetDrawer id={targetId} onClose={() => setTargetId(null)} openIncident={openIncident} />
-        <IncidentDrawer id={incidentId} onClose={() => setIncidentId(null)} openTarget={openTarget} />
+        <IncidentDrawer
+          id={incidentId}
+          onClose={() => {
+            setIncidentId(null);
+            if (route.page === "incidents" && route.sub) go("incidents"); // clear a deep link
+          }}
+          openTarget={openTarget}
+        />
         <CommandPalette
           open={paletteOpen}
           onClose={() => setPaletteOpen(false)}

@@ -2685,3 +2685,122 @@ a.link {
     display: grid;
   }
 }
+
+/* --- time-series dashboards ------------------------------------------------------------------ */
+
+.ts {
+  position: relative;
+  width: 100%;
+}
+.ts-svg {
+  display: block;
+  cursor: crosshair;
+  overflow: visible;
+}
+.ts-tick {
+  fill: var(--muted);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+.ts-tick-warn {
+  fill: var(--warning-ink);
+}
+.ts-line {
+  stroke-width: 2;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+}
+.ts-dot {
+  fill: var(--surface);
+  stroke-width: 2;
+}
+.ts-threshold {
+  stroke: var(--warning);
+  stroke-dasharray: 5 4;
+  opacity: 0.8;
+}
+.ts-tip {
+  position: absolute;
+  top: 8px;
+  z-index: 2;
+  min-width: 150px;
+  max-width: 260px;
+  padding: 8px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12px;
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow-lg);
+  pointer-events: none;
+}
+.ts-tip-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.ts-tip-row .truncate {
+  flex: 1;
+  color: var(--text-2);
+}
+.ts-tip i,
+.ts-legend i {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex: none;
+  display: inline-block;
+}
+.ts-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 16px;
+  margin-top: 8px;
+  font-size: 12px;
+  color: var(--text-2);
+}
+.ts-legend span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.ts-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+  margin-bottom: 10px;
+}
+.ts-stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 24px;
+  margin-bottom: 12px;
+}
+.ts-stat {
+  display: flex;
+  flex-direction: column;
+}
+.ts-stat strong {
+  font-size: 18px;
+}
+.ts-stat-danger strong {
+  color: var(--danger-ink);
+}
+.ts-stat-success strong {
+  color: var(--success-ink);
+}
+.ts-panels {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 20px;
+}
+.ts-panel-title {
+  font-size: 13px;
+  font-weight: 600;
+  margin: 0 0 6px;
+  color: var(--text-2);
+}

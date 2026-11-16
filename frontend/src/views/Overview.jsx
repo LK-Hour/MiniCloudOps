@@ -14,6 +14,7 @@ import {
   ease,
   severityTone,
 } from "../components/ui.jsx";
+import { FleetTimeSeries, HostTimeSeries } from "./TimeSeriesPanels.jsx";
 import { duration, ms, timeAgo } from "../lib/format.js";
 import { useNow } from "../lib/hooks.js";
 
@@ -89,6 +90,10 @@ export default function Overview({ go, openTarget, openIncident }) {
         />
       </motion.div>
 
+      <Card title="Monitoring over time" variants={rise}>
+        <FleetTimeSeries />
+      </Card>
+
       <div className="grid-2">
         <Card
           title="Target health"
@@ -161,6 +166,9 @@ export default function Overview({ go, openTarget, openIncident }) {
               <Meter label="CPU" value={host?.cpu_percent ?? null} warn={60} danger={80} />
               <Meter label="Memory" value={host?.memory_percent ?? null} />
               <Meter label="Disk" value={host?.disk_percent ?? null} warn={80} danger={90} />
+            </div>
+            <div style={{ marginTop: 16 }}>
+              <HostTimeSeries compact />
             </div>
           </Card>
         </div>
