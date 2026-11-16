@@ -1,4 +1,4 @@
-"""monitoring_db tables: health_checks, metric_snapshots, monitoring_configurations.
+"""monitoring_db tables: health_checks, target_states.
 
 target_id refers to a target owned by the Target Service (no cross-database FK).
 """
@@ -20,34 +20,29 @@ def _now() -> datetime:
 
 
 class HealthCheck(Base):
+    """One health check of one target. This is the history the API serves."""
+
     __tablename__ = "health_checks"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
     target_id: Mapped[str] = mapped_column(String(36), index=True)
     status: Mapped[str] = mapped_column(String(10))  # UP | DOWN
     status_code: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # NULL when no response arrived (timeout, refused). Never stored as 0.
     response_time_ms: Mapped[float | None] = mapped_column(Float, nullable=True)
     error: Mapped[str | None] = mapped_column(String(500), nullable=True)
     checked_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now, index=True)
 
 
-class MetricSnapshot(Base):
-    __tablename__ = "metric_snapshots"
+class TargetState(Base):
+    """Latest known state of a target, used to count failures and track its open incident."""
 
-    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
-    target_id: Mapped[str] = mapped_column(String(36), index=True)
-    # NULL means "metrics unavailable" (e.g. Prometheus down) — never store 0 for that.
-    cpu_percent: Mapped[float | None] = mapped_column(Float, nullable=True)
-    memory_percent: Mapped[float | None] = mapped_column(Float, nullable=True)
-    captured_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+    __tablename__ = "target_states"
 
-
-class MonitoringConfiguration(Base):
-    __tablename__ = "monitoring_configurations"
-
-    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
-    target_id: Mapped[str] = mapped_column(String(36), unique=True)
-    failure_threshold: Mapped[int] = mapped_column(Integer, default=3)
-    response_time_threshold_ms: Mapped[int] = mapped_column(Integer, default=2000)
-    cpu_threshold_percent: Mapped[float] = mapped_column(Float, default=80.0)
-    memory_threshold_percent: Mapped[float] = mapped_column(Float, default=85.0)
+    target_id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    status: Mapped[str] = mapped_column(String(10), default="UNKNOWN")  # UP | DOWN | UNKNOWN
+    consecutive_failures: Mapped[int] = mapped_column(Integer, default=0)
+    last_checked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_response_time_ms: Mapped[float | None] = mapped_column(Float, nullable=True)
+    # Incident opened for the current outage, so it is opened once and resolved on recovery.
+    open_incident_id: Mapped[str | None] = mapped_column(String(36), nullable=True)

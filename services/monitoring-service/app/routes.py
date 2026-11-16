@@ -1,20 +1,51 @@
 """Monitoring API: /api/v1/monitoring (contract from docs/MiniCloudOps.md §5.2).
 
-TODO: background scheduler that, for each enabled target:
-  1. fetches targets from the Target Service,
-  2. runs the HTTP check and records a HealthCheck + metrics,
-  3. queries Prometheus for CPU/memory (None when unavailable, never 0),
-  4. reports results to the Incident Service via app.http_client.request_with_retry.
+The checks themselves run in app/monitor.py, on a schedule or through POST /check/{id}.
 """
-from fastapi import APIRouter, Response
+import logging
+from typing import Annotated
+
+from fastapi import APIRouter, Depends, Query, Request, Response, status
 from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
 
-from app import metrics  # noqa: F401  (registers the custom metrics)
+from app.clients import ServiceUnavailable
 from app.config import get_settings
-from app.errors import not_implemented
-from app.schemas import HealthCheckResult, TargetStatus
+from app.errors import ApiError
+from app.monitor import Monitor, StateSnapshot
+from app.prometheus import ContainerUsage
+from app.schemas import (
+    HealthCheckResult,
+    HostStats,
+    InfrastructureRead,
+    MonitoringPolicy,
+    RecentCheck,
+    TargetOverview,
+    TargetStatus,
+)
 
+logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/v1/monitoring", tags=["monitoring"])
+
+
+def get_monitor(request: Request) -> Monitor:
+    """The Monitor built at startup. Tests override this dependency."""
+    return request.app.state.monitor
+
+
+MonitorDep = Annotated[Monitor, Depends(get_monitor)]
+
+
+async def _fetch_target(monitor: Monitor, target_id: str) -> dict | None:
+    """The target from the Target Service; None if unknown. 503 if the Target Service is down."""
+    try:
+        return await monitor.targets.get(target_id)
+    except ServiceUnavailable as exc:
+        logger.warning("Target Service unavailable", extra={"target_id": target_id, "error": str(exc)})
+        raise ApiError(status.HTTP_503_SERVICE_UNAVAILABLE, "Target Service unavailable") from exc
+
+
+def _not_found(target_id: str) -> ApiError:
+    return ApiError(status.HTTP_404_NOT_FOUND, f"Target '{target_id}' not found")
 
 
 @router.get("/health")
@@ -22,14 +53,78 @@ def service_health() -> dict:
     return {"status": "ok", "service": get_settings().service_name}
 
 
+@router.get("/config", response_model=MonitoringPolicy)
+def monitoring_policy():
+    """Thresholds and intervals in effect. Change them with environment variables (see .env.example)."""
+    settings = get_settings()
+    return MonitoringPolicy(**{name: getattr(settings, name) for name in MonitoringPolicy.model_fields})
+
+
+@router.get("/targets", response_model=list[TargetOverview])
+def targets_overview(
+    monitor: MonitorDep,
+    recent: Annotated[int, Query(ge=0, le=100, description="Latest checks to include per target")] = 20,
+):
+    """State of every target this service has checked, in one call (no per-target requests)."""
+    return [
+        TargetOverview(
+            target_id=state.target_id,
+            status=state.status,
+            consecutive_failures=state.consecutive_failures,
+            last_checked_at=state.last_checked_at,
+            last_response_time_ms=state.last_response_time_ms,
+            open_incident_id=state.open_incident_id,
+            recent=[RecentCheck.model_validate(c) for c in checks],
+        )
+        for state, checks in monitor.overview(recent)
+    ]
+
+
+@router.get("/infrastructure", response_model=InfrastructureRead)
+async def infrastructure(monitor: MonitorDep):
+    """Host and container usage, MiniOps service status and firing alerts, from Prometheus."""
+    infra = await monitor.prometheus.infrastructure()
+    return InfrastructureRead(
+        available=infra.available,
+        collected_at=infra.collected_at,
+        host=HostStats(**infra.host),
+        containers=infra.containers,
+        services=infra.services,
+        alerts=infra.alerts,
+    )
+
+
 @router.get("/targets/{target_id}/status", response_model=TargetStatus)
-def target_status(target_id: str):
-    raise not_implemented()
+async def target_status(target_id: str, monitor: MonitorDep):
+    target = await _fetch_target(monitor, target_id)
+    if target is None:
+        raise _not_found(target_id)
+
+    state = monitor.get_state(target_id) or StateSnapshot.unknown(target_id)
+    if not target["enabled"]:
+        state = StateSnapshot.unknown(target_id)  # not monitored, so any old result is stale
+    usage: ContainerUsage = await monitor.container_usage(target)
+    return TargetStatus(
+        target_id=target_id,
+        status=state.status,
+        consecutive_failures=state.consecutive_failures,
+        last_checked_at=state.last_checked_at,
+        last_response_time_ms=state.last_response_time_ms,
+        open_incident_id=state.open_incident_id,
+        metrics_available=usage.available,
+        cpu_percent=usage.cpu_percent,
+        memory_percent=usage.memory_percent,
+    )
 
 
 @router.get("/targets/{target_id}/history", response_model=list[HealthCheckResult])
-def target_history(target_id: str, limit: int = 50):
-    raise not_implemented()
+def target_history(
+    target_id: str,
+    monitor: MonitorDep,
+    limit: Annotated[int, Query(ge=1, le=500, description="Newest checks first")] = 50,
+):
+    # Served from this service's own data, so history stays readable after a target is deleted.
+    return monitor.history(target_id, limit)
 
 
 @router.get("/metrics")
@@ -38,5 +133,10 @@ def prometheus_metrics() -> Response:
 
 
 @router.post("/check/{target_id}", response_model=HealthCheckResult)
-async def trigger_check(target_id: str):
-    raise not_implemented()
+async def trigger_check(target_id: str, monitor: MonitorDep):
+    target = await _fetch_target(monitor, target_id)
+    if target is None:
+        raise _not_found(target_id)
+    if not target["enabled"]:
+        raise ApiError(status.HTTP_409_CONFLICT, f"Target '{target_id}' is disabled; enable it to check it")
+    return await monitor.check_target(target)
