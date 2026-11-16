@@ -60,6 +60,12 @@ services:
       TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
       TELEGRAM_CHAT_ID: ${TELEGRAM_CHAT_ID:-}
       DASHBOARD_URL: http://localhost:${FRONTEND_PORT:-3000}
+      ALERT_TIMEZONE: ${ALERT_TIMEZONE:-UTC}
+      # Bot commands (/status, /menu, ...): long-polls Telegram and reads these services.
+      TELEGRAM_COMMANDS_ENABLED: ${TELEGRAM_COMMANDS_ENABLED:-true}
+      TARGET_SERVICE_URL: http://target-service:8000
+      MONITORING_SERVICE_URL: http://monitoring-service:8000
+      INCIDENT_SERVICE_URL: http://incident-service:8000
 
   # ---------- Edge (published to localhost) ----------
   gateway:

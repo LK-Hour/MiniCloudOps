@@ -84,6 +84,86 @@ Each new incident and each recovery can also be sent to a Telegram chat:
    TELEGRAM_CHAT_ID=123456789
    ```
 4. Dashboard → **Settings → Notifications → Telegram alerts → Send test**.
+5. Optional: set `ALERT_TIMEZONE` (an IANA name such as `Asia/Phnom_Penh`) to show times in your zone. The default is UTC.
+
+What a critical alert looks like:
+
+```
+🔴 CRITICAL · Incident opened
+
+Shop API is unavailable
+
+Target    Shop API
+URL       http://shop-api:8000/health
+Failure   HTTP 503 · Service Unavailable
+Response  12 ms
+Streak    3 failed checks in a row (threshold 3)
+Checked   every 30 s
+Failing   16:16:34 +07 · 16 Nov (1 min 30 s ago)
+
+📊 Latest checks (newest first)
+✗ 503  ✗ 503  ✗ 503  ✓ 200
+
+🔎 Likely cause
+The app reports itself unavailable: overloaded, in maintenance, or a dependency it needs is down.
+
+🛠 What to check
+• The app's error logs at the time of the check
+• Its dependencies (database, cache, other services)
+• Recent deploys or configuration changes
+
+🆔 Incident 1610583c · Open in MiniOps
+```
+
+How the template works:
+
+- **Header and sound by severity.** 🔴 CRITICAL and 🟠 WARNING alerts make a sound. 🔵 INFO alerts and ✅ RESOLVED messages arrive silently.
+- **Likely cause and what to check** depend on how the check failed:
+  - timeout, DNS failure (for example a stopped container), connection refused, TLS certificate, broken HTTP, blocked by SSRF protection
+  - for HTTP errors, the status code: 500, 502, 503, 504, 401, 403, 404, 405 and 429 each have their own explanation
+- **The resolved message** shows the target, the current status and response time, the downtime, and the start and end times.
+- **The link** opens the incident in the dashboard (`#/incidents/<id>`).
+
+#### Bot commands
+
+Type `/` in the chat with your bot to see the commands:
+
+| Command | What it does |
+| --- | --- |
+| `/status` | Overview: targets up, down and paused; open and acknowledged incidents; service health; whether alerts make a sound; what is down now |
+| `/menu` | Main menu with buttons (also `/start`) |
+| `/targets` | Every target, worst first, with its response time. Tap one for its details, latest checks and **Check now** |
+| `/incidents` | Active incidents with **Ack** and **Resolve** buttons |
+| `/check <name>` | Run a health check now. Matches part of the name, for example `/check shop`; with no name it lists the targets |
+| `/services` | Readiness of the four MiniOps services |
+| `/quiet 30` · `/quiet off` | Alerts arrive without sound for 30 minutes (up to 24 h). They still arrive |
+| `/help` | The list above |
+
+Alerts carry buttons too:
+
+- **✅ Acknowledge:** acknowledges the incident and records who did it, for example "Acknowledged in Telegram by Kim".
+- **▶ Check now:** runs a fresh check and replies with the result.
+- **📊 Status**
+
+Menu buttons update the same message instead of sending new ones.
+
+How it works:
+
+- **Polling.** MiniOps is local, so Telegram cannot call it with a webhook. The Notification Service long-polls Telegram instead, and reads the Target, Monitoring and Incident services over the internal network to answer.
+- **Private.** The bot answers only `TELEGRAM_CHAT_ID`. Other chats are ignored and logged, and their button presses are refused.
+- **No late answers.** Commands sent while MiniOps was down are not answered when it comes back.
+- **Quiet mode** is kept in memory, so a restart turns sound back on.
+- **Turning it off.** Set `TELEGRAM_COMMANDS_ENABLED=false` for alerts only, with no buttons.
+
+Usage is counted in `miniops_telegram_commands_total{command}`.
+
+Where the details come from:
+
+1. The Monitoring Service sends a `context` with the incident: target name and URL, `failure_kind`, error, status code, response time, failure streak and threshold, check interval and timeout, when the failures started, and the last 5 checks.
+2. The Incident Service adds `started_at` and, on resolution, `resolved_at` and `duration_seconds`.
+3. It passes everything to the Notification Service as `details`.
+
+`details` is used only to render the alert. It is not stored, so no database tables changed. A notification with no details, such as an incident created by hand through the API, falls back to its title and message. The templates are in [app/alert_templates.py](services/notification-service/app/alert_templates.py).
 
 The dashboard stays the source of truth. A notification is stored first and then sent to Telegram in the background, so a slow or unreachable Telegram never delays an incident. A notification that the Incident Service sends again is not delivered twice. The bot token is never logged. Results are counted in `miniops_telegram_deliveries_total{result="sent|failed"}`.
 

@@ -6,6 +6,15 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versioning: [S
 ## [Unreleased]
 
 ### Added
+- Telegram bot commands: `/status`, `/menu`, `/targets`, `/incidents`, `/check <name>`, `/services`, `/quiet <minutes|off>` and `/help`, registered in Telegram's command menu.
+  - Menu buttons edit one message in place.
+  - Alerts have **Acknowledge**, **Check now** and **Status** buttons.
+  - The bot long-polls Telegram, so it works on localhost, and answers only the configured chat.
+  - `TELEGRAM_COMMANDS_ENABLED=false` turns it off.
+- Telegram alert templates. They are styled by severity (CRITICAL and WARNING make a sound; INFO and RESOLVED are silent) and show the target, URL, failure, response time, failure streak, when the failures started and the latest checks. They give a likely cause and what to check for each failure kind and HTTP status. The resolved message shows the downtime. Times use `ALERT_TIMEZONE`.
+- Monitoring Service: each failed check is classified (`timeout`, `dns`, `connection`, `tls`, `protocol`, `http_4xx`, `http_5xx`, `blocked`). Outage and recovery details are sent with the incident as `context`.
+- Incident Service: forwards that `context`, plus the start time and downtime, to the Notification Service as `details`. Neither is stored.
+- Dashboard: `#/incidents/<id>` opens that incident directly. Alerts link to it.
 - Notification Service: optional Telegram alerts. New notifications are forwarded in the background when `TELEGRAM_BOT_TOKEN` and `TELEGRAM_CHAT_ID` are set; duplicates are never sent twice and the token is never logged. `GET /channels` and `POST /channels/telegram/test`, with a Telegram row in Settings.
 - All services: API request metrics `miniops_api_requests_total` and `miniops_api_request_duration_seconds`, labelled by route template. Prometheus adds a `service` label.
 - Monitoring Service: `miniops_target_info` maps target IDs to names for dashboards.
