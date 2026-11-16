@@ -114,7 +114,7 @@ class Monitor:
             self._observe(target_id, result)
             metrics.set_target_name(target_id, target.get("name") or target_id)
             await self.targets.report_status(target_id, result.status)
-            await self._apply_incident_rules(target, state, check)
+            await self._apply_incident_rules(target, state, check, result)
             return check
 
     async def _probe_safely(self, target: dict) -> ProbeResult:
@@ -129,12 +129,12 @@ class Monitor:
             )
         except UnresolvableHostError:
             # A stopped Docker container's name stops resolving: an outage, not an attack.
-            return ProbeResult("DOWN", error=f"DNS lookup failed for '{host_of(url)}'")
+            return ProbeResult("DOWN", error=f"DNS lookup failed for '{host_of(url)}'", failure_kind="dns")
         except UnsafeTargetError as exc:
             logger.warning(
                 "Check blocked by SSRF protection", extra={"target_id": target["id"], "reason": str(exc)}
             )
-            return ProbeResult("DOWN", error=f"Blocked: {exc}")
+            return ProbeResult("DOWN", error=f"Blocked: {exc}", failure_kind="blocked")
         return await probe(url, timeout=self.settings.check_timeout_seconds, transport=self.transport)
 
     def _record(self, target_id: str, result: ProbeResult) -> tuple[HealthCheck, StateSnapshot]:
@@ -182,7 +182,9 @@ class Monitor:
 
     # --- incidents --------------------------------------------------------------------------------
 
-    async def _apply_incident_rules(self, target: dict, state: StateSnapshot, check: HealthCheck) -> None:
+    async def _apply_incident_rules(
+        self, target: dict, state: StateSnapshot, check: HealthCheck, result: ProbeResult
+    ) -> None:
         threshold = self.settings.failure_threshold
         if check.status == "DOWN" and state.consecutive_failures >= threshold and not state.open_incident_id:
             try:
@@ -194,6 +196,7 @@ class Monitor:
                         f"HTTP health check of {target['target_url']} failed {state.consecutive_failures} "
                         f"times in a row. Last error: {check.error}"
                     ),
+                    context=self._outage_context(target, state, check, result),
                 )
             except ServiceUnavailable as exc:
                 logger.error(
@@ -206,12 +209,66 @@ class Monitor:
 
         elif check.status == "UP" and state.open_incident_id:
             note = "Target recovered: health check passed"
-            if await self._resolve(state.open_incident_id, target["id"], note):
+            context = {
+                **self._target_context(target),
+                "status_code": check.status_code,
+                "response_time_ms": check.response_time_ms,
+                "recovered_at": check.checked_at.isoformat(),
+            }
+            if await self._resolve(state.open_incident_id, target["id"], note, context):
                 self._set_incident(target["id"], None)
 
-    async def _resolve(self, incident_id: str, target_id: str, note: str) -> bool:
+    def _target_context(self, target: dict) -> dict:
+        return {
+            "target_id": target["id"],
+            "target_name": target.get("name") or target["id"],
+            "target_url": target["target_url"],
+            "check_interval_seconds": target.get("check_interval")
+            or self.settings.default_check_interval_seconds,
+        }
+
+    def _outage_context(
+        self, target: dict, state: StateSnapshot, check: HealthCheck, result: ProbeResult
+    ) -> dict:
+        """Facts for the alert: what failed, how, since when, and the latest checks."""
+        with self.session_factory() as db:
+            recent = db.scalars(
+                select(HealthCheck)
+                .where(HealthCheck.target_id == target["id"])
+                .order_by(HealthCheck.checked_at.desc())
+                .limit(max(5, state.consecutive_failures))
+            ).all()
+        streak = []
+        for past in recent:  # newest first; the current outage is the leading run of DOWN checks
+            if past.status != "DOWN":
+                break
+            streak.append(past)
+        return {
+            **self._target_context(target),
+            "failure_kind": result.failure_kind,
+            "error": check.error,
+            "status_code": check.status_code,
+            "response_time_ms": check.response_time_ms,
+            "consecutive_failures": state.consecutive_failures,
+            "failure_threshold": self.settings.failure_threshold,
+            "check_timeout_seconds": self.settings.check_timeout_seconds,
+            "first_failed_at": (streak[-1] if streak else check).checked_at.isoformat(),
+            "recent_checks": [
+                {
+                    "status": c.status,
+                    "status_code": c.status_code,
+                    "response_time_ms": c.response_time_ms,
+                    "checked_at": c.checked_at.isoformat(),
+                }
+                for c in recent[:5]
+            ],
+        }
+
+    async def _resolve(
+        self, incident_id: str, target_id: str, note: str, context: dict | None = None
+    ) -> bool:
         try:
-            await self.incidents.resolve_incident(incident_id, note)
+            await self.incidents.resolve_incident(incident_id, note, context)
         except ServiceUnavailable as exc:
             logger.error(
                 "Could not resolve incident; will retry",
@@ -273,6 +330,58 @@ class Monitor:
         for check in checks:
             by_target.setdefault(check.target_id, []).append(check)
         return [(state, by_target.get(state.target_id, [])) for state in states]
+
+    def timeseries(self, minutes: int, target_id: str | None = None, buckets: int = 60) -> dict:
+        """Checks in the last `minutes`, grouped into `buckets` equal slots (oldest first).
+
+        Returns {"bucket_seconds", "overall", "targets"}; with `target_id`, only that target.
+        Empty buckets are kept (checks=0, avg=None) so a chart shows gaps instead of inventing data.
+        """
+        end = datetime.now(UTC)
+        start = end - timedelta(minutes=minutes)
+        width = max(1, minutes * 60 // buckets)
+        with self.session_factory() as db:
+            query = select(HealthCheck).where(HealthCheck.checked_at >= start)
+            query = query.order_by(HealthCheck.checked_at)
+            if target_id:
+                query = query.where(HealthCheck.target_id == target_id)
+            checks = list(db.scalars(query))
+
+        def blank() -> list[dict]:
+            return [{"checks": 0, "failures": 0, "sum": 0.0, "n": 0, "max": None} for _ in range(buckets)]
+
+        def add(slots: list[dict], check: HealthCheck) -> None:
+            checked = check.checked_at if check.checked_at.tzinfo else check.checked_at.replace(tzinfo=UTC)
+            slot = slots[min(buckets - 1, max(0, int((checked - start).total_seconds() // width)))]
+            slot["checks"] += 1
+            slot["failures"] += check.status == "DOWN"
+            if check.response_time_ms is not None:
+                slot["sum"] += check.response_time_ms
+                slot["n"] += 1
+                slot["max"] = max(slot["max"] or 0.0, check.response_time_ms)
+
+        def finish(slots: list[dict]) -> list[dict]:
+            return [
+                {
+                    "t": start + timedelta(seconds=i * width),
+                    "checks": s["checks"],
+                    "failures": s["failures"],
+                    "avg_ms": round(s["sum"] / s["n"], 1) if s["n"] else None,
+                    "max_ms": s["max"],
+                }
+                for i, s in enumerate(slots)
+            ]
+
+        overall = blank()
+        per_target: dict[str, list[dict]] = {}
+        for check in checks:
+            add(overall, check)
+            add(per_target.setdefault(check.target_id, blank()), check)
+        return {
+            "bucket_seconds": width,
+            "overall": finish(overall),
+            "targets": [{"target_id": tid, "buckets": finish(slots)} for tid, slots in per_target.items()],
+        }
 
     async def container_usage(self, target: dict) -> ContainerUsage:
         return await self.prometheus.container_usage(host_of(target["target_url"]))

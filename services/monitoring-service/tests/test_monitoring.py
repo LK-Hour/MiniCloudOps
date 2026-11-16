@@ -168,3 +168,46 @@ def test_monitoring_policy_is_exposed_read_only(client):
     assert body["default_check_interval_seconds"] == 30
     assert "database_url" not in body  # only the policy, never connection settings
     assert client.put(f"{API}/config", json={}).status_code == 405
+
+
+# --- time series ----------------------------------------------------------------------------------
+
+
+def test_check_timeseries_buckets_checks(client, target_service):
+    target_service.add(make_target())
+    client.post(f"{API}/check/t1")
+    body = client.get(f"{API}/timeseries?minutes=30").json()
+    assert body["minutes"] == 30
+    assert len(body["overall"]) == 60
+    assert sum(b["checks"] for b in body["overall"]) == 1
+    assert body["targets"][0]["target_id"] == "t1"
+    empty = [b for b in body["overall"] if b["checks"] == 0]
+    assert all(b["avg_ms"] is None for b in empty)  # gaps stay null, never 0
+
+
+def test_target_timeseries_only_includes_that_target(client, target_service):
+    target_service.add(make_target("t1"))
+    target_service.add(make_target("t2"))
+    client.post(f"{API}/check/t1")
+    client.post(f"{API}/check/t2")
+    body = client.get(f"{API}/targets/t1/timeseries").json()
+    assert [t["target_id"] for t in body["targets"]] == ["t1"]
+
+
+def test_infrastructure_history(client):
+    body = client.get(f"{API}/infrastructure/history?minutes=60").json()
+    assert body["available"] is True
+    assert body["host"]["cpu"][1]["v"] == 9.0
+    assert "demo-app" in body["containers"]
+
+
+def test_target_resources(client, target_service):
+    target_service.add(make_target())
+    body = client.get(f"{API}/targets/t1/resources").json()
+    assert body["cpu"][0]["v"] == 2.0
+    assert body["memory"] == []
+    assert client.get(f"{API}/targets/nope/resources").status_code == 404
+
+
+def test_timeseries_rejects_silly_windows(client):
+    assert client.get(f"{API}/timeseries?minutes=1").status_code == 422

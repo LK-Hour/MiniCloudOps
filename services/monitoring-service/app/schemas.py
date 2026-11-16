@@ -96,3 +96,50 @@ class InfrastructureRead(BaseModel):
     containers: list[ContainerStats]
     services: list[ServiceScrape]
     alerts: list[Alert]
+
+
+class SeriesPoint(BaseModel):
+    t: datetime
+    v: float
+
+
+class InfrastructureHistory(BaseModel):
+    """Host and container usage over a window, for time-series charts."""
+
+    available: bool = Field(description="false when Prometheus could not be reached; series are empty")
+    minutes: int
+    step_seconds: int
+    host: dict[str, list[SeriesPoint]] = Field(description="cpu, memory, disk: % over time")
+    containers: dict[str, list[SeriesPoint]] = Field(description="CPU % of one core, busiest services")
+
+
+class ResourceHistory(BaseModel):
+    """One target's container usage over a window."""
+
+    available: bool
+    minutes: int
+    step_seconds: int
+    cpu: list[SeriesPoint] = Field(description="% of one core")
+    memory: list[SeriesPoint] = Field(description="% of host memory")
+
+
+class Bucket(BaseModel):
+    t: datetime = Field(description="Start of the bucket")
+    checks: int
+    failures: int
+    avg_ms: float | None = Field(description="Mean response time of checks that got a response; null if none")
+    max_ms: float | None
+
+
+class TargetSeries(BaseModel):
+    target_id: str
+    buckets: list[Bucket]
+
+
+class CheckTimeseries(BaseModel):
+    """Health checks aggregated into equal time buckets: all targets together, and each target."""
+
+    minutes: int
+    bucket_seconds: int
+    overall: list[Bucket]
+    targets: list[TargetSeries]

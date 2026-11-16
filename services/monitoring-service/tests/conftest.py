@@ -15,7 +15,7 @@ from app.config import Settings
 from app.db import Base
 from app.main import app
 from app.monitor import Monitor
-from app.prometheus import ContainerUsage, Infrastructure
+from app.prometheus import ContainerUsage, Infrastructure, SeriesSet
 from app.routes import get_monitor
 
 FAKE_DNS = {
@@ -66,6 +66,7 @@ class FakeIncidentService:
     def __init__(self):
         self.opened: list[dict] = []
         self.resolved: list[str] = []
+        self.resolve_contexts: list[dict | None] = []
         self.down = False
 
     async def open_incident(self, **incident):
@@ -74,10 +75,11 @@ class FakeIncidentService:
         self.opened.append(incident)
         return f"inc-{len(self.opened)}"
 
-    async def resolve_incident(self, incident_id, note):
+    async def resolve_incident(self, incident_id, note, context=None):
         if self.down:
             raise ServiceUnavailable("incident-service down")
         self.resolved.append(incident_id)
+        self.resolve_contexts.append(context)
 
 
 class FakePrometheus:
@@ -100,6 +102,18 @@ class FakePrometheus:
 
     async def infrastructure(self):
         return self.infra
+
+    async def host_history(self, minutes):
+        series = {"cpu": [(1_700_000_000.0, 5.0), (1_700_000_060.0, 9.0)], "memory": [], "disk": []}
+        return SeriesSet(available=self.infra.available, step_seconds=60, series=series)
+
+    async def containers_history(self, minutes):
+        series = {"demo-app": [(1_700_000_000.0, 1.5)]}
+        return SeriesSet(available=self.infra.available, step_seconds=60, series=series)
+
+    async def container_history(self, service, minutes):
+        self.asked.append(service)
+        return SeriesSet(available=True, step_seconds=60, series={"cpu": [(1_700_000_000.0, 2.0)]})
 
 
 class FakeApps:

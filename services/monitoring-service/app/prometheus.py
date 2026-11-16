@@ -34,6 +34,15 @@ class ContainerUsage:
 
 
 @dataclass(frozen=True)
+class SeriesSet:
+    """Time series over a window. Each series is a list of (unix_seconds, value)."""
+
+    available: bool
+    step_seconds: int
+    series: dict[str, list[tuple[float, float]]] = field(default_factory=dict)
+
+
+@dataclass(frozen=True)
 class Infrastructure:
     """Platform-wide view for the dashboard. Every number is None when there is no data."""
 
@@ -61,6 +70,17 @@ _CONTAINER_QUERIES = {
     "memory_bytes": f'{_BY_SERVICE} (container_memory_working_set_bytes{{{_LABEL}!=""}})',
 }
 _SERVICES_QUERY = 'up{job="miniops-services"}'
+_HOST_RANGE = {
+    "cpu": _HOST_QUERIES["cpu_percent"],
+    "memory": _HOST_QUERIES["memory_percent"],
+    "disk": _HOST_QUERIES["disk_percent"],
+}
+TOP_CONTAINERS = 6
+
+
+def step_for(minutes: int) -> int:
+    """Query resolution: about 60-120 points per chart, never finer than the 15s scrape."""
+    return max(15, (minutes * 60) // 90 // 15 * 15)
 
 
 def _number(raw: str) -> float | None:
@@ -132,6 +152,82 @@ class PrometheusClient:
             services=services,
             alerts=alerts,
         )
+
+    async def host_history(self, minutes: int) -> SeriesSet:
+        """CPU, memory and disk of the host over the last `minutes`."""
+        step = step_for(minutes)
+        try:
+            async with self._client() as client:
+                results = await asyncio.gather(
+                    *(self._range(client, q, minutes, step) for q in _HOST_RANGE.values())
+                )
+        except (httpx.HTTPError, ValueError, KeyError) as exc:
+            return self._range_failed(exc, step)
+        series = {name: (rows[0][1] if rows else []) for name, rows in zip(_HOST_RANGE, results, strict=True)}
+        return SeriesSet(available=True, step_seconds=step, series=series)
+
+    async def container_history(self, service: str | None, minutes: int) -> SeriesSet:
+        """CPU (% of one core) and memory (% of host) of one Compose service over the last `minutes`."""
+        step = step_for(minutes)
+        if not service or not _SERVICE_NAME.match(service):
+            return SeriesSet(available=True, step_seconds=step)
+        selector = f'{{{_LABEL}="{service}"}}'
+        queries = {
+            "cpu": f"sum(rate(container_cpu_usage_seconds_total{selector}[1m])) * 100",
+            "memory": (
+                f"sum(container_memory_working_set_bytes{selector}) / scalar(max(machine_memory_bytes)) * 100"
+            ),
+        }
+        try:
+            async with self._client() as client:
+                results = await asyncio.gather(
+                    *(self._range(client, q, minutes, step) for q in queries.values())
+                )
+        except (httpx.HTTPError, ValueError, KeyError) as exc:
+            return self._range_failed(exc, step)
+        series = {name: (rows[0][1] if rows else []) for name, rows in zip(queries, results, strict=True)}
+        return SeriesSet(available=True, step_seconds=step, series=series)
+
+    async def containers_history(self, minutes: int) -> SeriesSet:
+        """CPU of the busiest containers over the last `minutes`, keyed by Compose service."""
+        step = step_for(minutes)
+        rate = f'rate(container_cpu_usage_seconds_total{{{_LABEL}!=""}}[1m])'
+        query = f"topk({TOP_CONTAINERS}, {_BY_SERVICE} ({rate}) * 100)"
+        try:
+            async with self._client() as client:
+                rows = await self._range(client, query, minutes, step)
+        except (httpx.HTTPError, ValueError, KeyError) as exc:
+            return self._range_failed(exc, step)
+        series = {labels.get(_LABEL, "?"): points for labels, points in rows}
+        return SeriesSet(available=True, step_seconds=step, series=series)
+
+    def _client(self) -> httpx.AsyncClient:
+        return httpx.AsyncClient(
+            timeout=self.timeout, transport=self.transport, trust_env=False, headers=outbound_headers()
+        )
+
+    @staticmethod
+    def _range_failed(exc: Exception, step: int) -> SeriesSet:
+        logger.warning("Prometheus unavailable", extra={"error": str(exc) or type(exc).__name__})
+        return SeriesSet(available=False, step_seconds=step)
+
+    async def _range(
+        self, client: httpx.AsyncClient, query: str, minutes: int, step: int
+    ) -> list[tuple[dict, list[tuple[float, float]]]]:
+        end = datetime.now(UTC).timestamp()
+        response = await client.get(
+            self.query_url + "_range",
+            params={"query": query, "start": end - minutes * 60, "end": end, "step": step},
+        )
+        response.raise_for_status()
+        body = response.json()
+        if body.get("status") != "success":
+            raise ValueError(f"Prometheus query failed: {body.get('error')}")
+        out = []
+        for r in body["data"]["result"]:
+            points = [(float(t), v) for t, raw in r["values"] if (v := _number(raw)) is not None]
+            out.append((r["metric"], points))
+        return out
 
     async def _query(self, client: httpx.AsyncClient, query: str) -> list[dict]:
         response = await client.get(self.query_url, params={"query": query})

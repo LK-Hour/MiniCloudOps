@@ -14,6 +14,9 @@ class ProbeResult:
     status_code: int | None = None
     response_time_ms: float | None = None  # None when no response arrived
     error: str | None = None
+    # Why a check failed, for alerts:
+    # timeout | dns | connection | tls | protocol | http_4xx | http_5xx | blocked
+    failure_kind: str | None = None
 
 
 async def probe(
@@ -38,10 +41,30 @@ async def probe(
                 elapsed_ms = round((time.perf_counter() - start) * 1000, 2)
                 code = response.status_code
     except httpx.TimeoutException:
-        return ProbeResult("DOWN", error=f"Timed out after {timeout:g}s")
+        return ProbeResult("DOWN", error=f"Timed out after {timeout:g}s", failure_kind="timeout")
     except httpx.RequestError as exc:
-        return ProbeResult("DOWN", error=f"Connection failed ({type(exc).__name__})")
+        return ProbeResult(
+            "DOWN", error=f"Connection failed ({type(exc).__name__})", failure_kind=_classify(exc)
+        )
 
     if 200 <= code < 400:
         return ProbeResult("UP", status_code=code, response_time_ms=elapsed_ms)
-    return ProbeResult("DOWN", status_code=code, response_time_ms=elapsed_ms, error=f"HTTP {code}")
+    return ProbeResult(
+        "DOWN",
+        status_code=code,
+        response_time_ms=elapsed_ms,
+        error=f"HTTP {code}",
+        failure_kind="http_5xx" if code >= 500 else "http_4xx",
+    )
+
+
+def _classify(exc: httpx.RequestError) -> str:
+    """Name the kind of network failure. The text is only inspected, never shown or stored."""
+    text = str(exc).upper()
+    if isinstance(exc, httpx.ConnectError):
+        if "SSL" in text or "CERTIFICATE" in text or "TLS" in text:
+            return "tls"
+        if "NAME OR SERVICE" in text or "NODENAME" in text or "GETADDRINFO" in text:
+            return "dns"
+        return "connection"
+    return "protocol"  # the server answered something that is not valid HTTP, or hung up mid-answer

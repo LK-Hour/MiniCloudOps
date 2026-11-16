@@ -2,7 +2,9 @@
 import asyncio
 
 import httpx
+import pytest
 
+from app.probe import probe
 from tests.conftest import make_target
 
 
@@ -205,3 +207,75 @@ def test_target_names_of_removed_targets_are_dropped():
     metrics.keep_target_names({"t-keep"})
     ids = {s.labels["target_id"] for s in metrics.TARGET_INFO.collect()[0].samples}
     assert "t-keep" in ids and "t-gone" not in ids
+
+
+# --- alert details ---------------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("outcome", "kind"),
+    [
+        (503, "http_5xx"),
+        (404, "http_4xx"),
+        (httpx.ReadTimeout, "timeout"),
+        (httpx.ConnectError, "connection"),
+        (httpx.RemoteProtocolError, "protocol"),
+    ],
+)
+def test_failures_are_classified(apps, outcome, kind):
+    apps.set("demo-app", outcome)
+    assert _probe(apps).failure_kind == kind
+
+
+def test_healthy_probe_has_no_failure_kind(apps):
+    assert _probe(apps).failure_kind is None
+
+
+def test_tls_failure_is_classified(apps):
+    def handler(request):
+        raise httpx.ConnectError("[SSL: CERTIFICATE_VERIFY_FAILED] certificate has expired", request=request)
+
+    result = asyncio.run(probe("https://demo-app/", timeout=1, transport=httpx.MockTransport(handler)))
+    assert result.failure_kind == "tls"
+    assert "certificate" not in result.error  # the raw text is never stored
+
+
+def _probe(apps):
+    return asyncio.run(
+        probe("http://demo-app/health", timeout=1, transport=httpx.MockTransport(apps.handler))
+    )
+
+
+def test_incident_carries_the_outage_details(monitor, apps, incident_service):
+    target = make_target()
+    check(monitor, target)  # one healthy check before the outage
+    apps.set("demo-app", 503)
+    check_n(monitor, target, 3)
+
+    context = incident_service.opened[0]["context"]
+    assert context["target_id"] == "t1"
+    assert context["target_name"] == "App t1"
+    assert context["target_url"] == "http://demo-app/health"
+    assert context["failure_kind"] == "http_5xx"
+    assert context["status_code"] == 503
+    assert context["error"] == "HTTP 503"
+    assert context["consecutive_failures"] == 3
+    assert context["failure_threshold"] == 3
+    assert context["check_interval_seconds"] == 30
+    statuses = [c["status"] for c in context["recent_checks"]]
+    assert statuses == ["DOWN", "DOWN", "DOWN", "UP"]  # newest first
+    assert context["first_failed_at"] == context["recent_checks"][2]["checked_at"]
+
+
+def test_resolution_carries_the_recovery_details(monitor, apps, incident_service):
+    target = make_target()
+    apps.set("demo-app", 503)
+    check_n(monitor, target, 3)
+    apps.set("demo-app", 200)
+    check(monitor, target)
+
+    context = incident_service.resolve_contexts[0]
+    assert context["target_name"] == "App t1"
+    assert context["status_code"] == 200
+    assert context["response_time_ms"] is not None
+    assert context["recovered_at"]

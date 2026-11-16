@@ -2,7 +2,9 @@
 
 The checks themselves run in app/monitor.py, on a schedule or through POST /check/{id}.
 """
+import asyncio
 import logging
+from datetime import UTC, datetime
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Query, Request, Response, status
@@ -11,14 +13,18 @@ from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
 from app.clients import ServiceUnavailable
 from app.config import get_settings
 from app.errors import ApiError
-from app.monitor import Monitor, StateSnapshot
-from app.prometheus import ContainerUsage
+from app.monitor import Monitor, StateSnapshot, host_of
+from app.prometheus import ContainerUsage, SeriesSet
 from app.schemas import (
+    CheckTimeseries,
     HealthCheckResult,
     HostStats,
+    InfrastructureHistory,
     InfrastructureRead,
     MonitoringPolicy,
     RecentCheck,
+    ResourceHistory,
+    SeriesPoint,
     TargetOverview,
     TargetStatus,
 )
@@ -91,6 +97,57 @@ async def infrastructure(monitor: MonitorDep):
         containers=infra.containers,
         services=infra.services,
         alerts=infra.alerts,
+    )
+
+
+MinutesQuery = Annotated[int, Query(ge=5, le=1440, description="Window length, in minutes")]
+
+
+def _points(series: SeriesSet, name: str) -> list[SeriesPoint]:
+    return [SeriesPoint(t=datetime.fromtimestamp(t, UTC), v=v) for t, v in series.series.get(name, [])]
+
+
+@router.get("/timeseries", response_model=CheckTimeseries)
+def checks_timeseries(monitor: MonitorDep, minutes: MinutesQuery = 60):
+    """Response time and failures over time, for all targets together and for each one."""
+    return CheckTimeseries(minutes=minutes, **monitor.timeseries(minutes))
+
+
+@router.get("/infrastructure/history", response_model=InfrastructureHistory)
+async def infrastructure_history(monitor: MonitorDep, minutes: MinutesQuery = 60):
+    """Host CPU/memory/disk and the busiest containers' CPU over time, from Prometheus."""
+    host, containers = await asyncio.gather(
+        monitor.prometheus.host_history(minutes), monitor.prometheus.containers_history(minutes)
+    )
+    return InfrastructureHistory(
+        available=host.available and containers.available,
+        minutes=minutes,
+        step_seconds=host.step_seconds,
+        host={name: _points(host, name) for name in host.series},
+        containers={name: _points(containers, name) for name in containers.series},
+    )
+
+
+@router.get("/targets/{target_id}/timeseries", response_model=CheckTimeseries)
+def target_timeseries(target_id: str, monitor: MonitorDep, minutes: MinutesQuery = 60):
+    """One target's checks grouped over time. Served from this service's data, like /history."""
+    data = monitor.timeseries(minutes, target_id=target_id)
+    return CheckTimeseries(minutes=minutes, **data)
+
+
+@router.get("/targets/{target_id}/resources", response_model=ResourceHistory)
+async def target_resources(target_id: str, monitor: MonitorDep, minutes: MinutesQuery = 60):
+    """One target's container CPU and memory over time (empty outside Docker Compose)."""
+    target = await _fetch_target(monitor, target_id)
+    if target is None:
+        raise _not_found(target_id)
+    series = await monitor.prometheus.container_history(host_of(target["target_url"]), minutes)
+    return ResourceHistory(
+        available=series.available,
+        minutes=minutes,
+        step_seconds=series.step_seconds,
+        cpu=_points(series, "cpu"),
+        memory=_points(series, "memory"),
     )
 
 

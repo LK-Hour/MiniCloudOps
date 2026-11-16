@@ -75,21 +75,31 @@ class IncidentServiceClient:
     def __init__(self, base_url: str) -> None:
         self.api = f"{base_url.rstrip('/')}/api/v1/incidents"
 
-    async def open_incident(self, *, target_id: str, title: str, severity: str, description: str) -> str:
+    async def open_incident(
+        self, *, target_id: str, title: str, severity: str, description: str, context: dict | None = None
+    ) -> str:
         """Create the incident and return its id. The Incident Service returns the existing open
         incident instead of a duplicate, so calling this twice for one outage is safe."""
         response = await _call(
             "POST",
             self.api,
-            json={"target_id": target_id, "title": title, "severity": severity, "description": description},
+            json={
+                "target_id": target_id,
+                "title": title,
+                "severity": severity,
+                "description": description,
+                "context": context,
+            },
         )
         if response.status_code not in (200, 201):
             raise _unexpected(response)
         return response.json()["id"]
 
-    async def resolve_incident(self, incident_id: str, note: str) -> None:
+    async def resolve_incident(self, incident_id: str, note: str, context: dict | None = None) -> None:
         response = await _call(
-            "PATCH", f"{self.api}/{incident_id}/status", json={"status": "RESOLVED", "note": note}
+            "PATCH",
+            f"{self.api}/{incident_id}/status",
+            json={"status": "RESOLVED", "note": note, "context": context},
         )
         if response.status_code == 404:  # deleted on the incident side; nothing left to resolve
             logger.warning("Incident to resolve no longer exists", extra={"incident_id": incident_id})
