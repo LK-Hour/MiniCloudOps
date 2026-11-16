@@ -4,11 +4,11 @@
 
 | Team member | Role | Contribution |
 | --- | --- | --- |
-| _name_ | Backend Engineer | Target Service |
-| _name_ | Backend Engineer | Monitoring Service |
-| _name_ | Backend Engineer | Incident and Notification services |
-| _name_ | DevOps & Observability Engineer | Docker, Compose, CI/CD, Prometheus, Grafana, Loki |
-| _name_ | Frontend Engineer | Dashboard and API integration |
+| Loem Kimhour | Backend Engineer | Target Service |
+| Loem Kimhour | Backend Engineer | Monitoring Service |
+| Loem Kimhour | Backend Engineer | Incident and Notification services |
+| Loem Kimhour | DevOps & Observability Engineer | Docker, Compose, CI/CD, Prometheus, Grafana, Loki |
+| Loem Kimhour | Frontend Engineer | Dashboard and API integration |
 
 ## Links
 
