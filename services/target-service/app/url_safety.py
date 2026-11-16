@@ -19,6 +19,8 @@ each request, which also covers DNS answers that change after registration.
 """
 import ipaddress
 import socket
+import threading
+import time
 from collections.abc import Callable, Iterable
 from urllib.parse import urlsplit
 
@@ -32,6 +34,10 @@ ALWAYS_BLOCKED_HOSTS = frozenset(
 
 class UnsafeTargetError(ValueError):
     """The URL must not be monitored. The message is safe to return to the client."""
+
+
+class UnresolvableHostError(UnsafeTargetError):
+    """The host has no DNS answer. Unsafe to register, but at check time it just means "down"."""
 
 
 def system_resolver(host: str, port: int) -> list[str]:
@@ -69,6 +75,35 @@ def _resolve(host: str, port: int, resolver: Resolver) -> list[IPAddress]:
         return []
 
 
+# The internal names' addresses are looked up on every validation. Cache them: they rarely change,
+# and a name that does not resolve from this container (one on another Docker network) costs a
+# multi-second DNS timeout each time. Misses are kept longer than hits.
+INTERNAL_TTL_SECONDS = 30.0
+INTERNAL_MISS_TTL_SECONDS = 300.0
+_internal_cache: dict[tuple[Resolver, str], tuple[float, list[IPAddress]]] = {}
+_internal_lock = threading.Lock()
+
+
+def _internal_addresses(name: str, resolver: Resolver) -> list[IPAddress]:
+    key = (resolver, name)
+    now = time.monotonic()
+    with _internal_lock:
+        hit = _internal_cache.get(key)
+    if hit:
+        stored_at, ips = hit
+        if now - stored_at < (INTERNAL_TTL_SECONDS if ips else INTERNAL_MISS_TTL_SECONDS):
+            return ips
+    ips = _resolve(name, 80, resolver)
+    with _internal_lock:
+        _internal_cache[key] = (now, ips)
+    return ips
+
+
+def clear_internal_cache() -> None:
+    with _internal_lock:
+        _internal_cache.clear()
+
+
 def validate_target_url(
     url: str,
     *,
@@ -100,13 +135,13 @@ def validate_target_url(
     except ValueError:
         addresses = _resolve(host, port, resolver)
         if not addresses:
-            raise UnsafeTargetError(f"Host '{host}' could not be resolved") from None
+            raise UnresolvableHostError(f"Host '{host}' could not be resolved") from None
 
     for ip in addresses:
         problem = _address_problem(ip, allow_private)
         if problem:
             raise UnsafeTargetError(f"Host '{host}' resolves to a {problem} address, which is not allowed")
 
-    internal_ips = {ip for name in blocked for ip in _resolve(name, port, resolver)}
+    internal_ips = {ip for name in blocked for ip in _internal_addresses(name, resolver)}
     if internal_ips.intersection(addresses):
         raise UnsafeTargetError(f"Host '{host}' points at an internal MiniOps service")
