@@ -1,0 +1,541 @@
+/* Visual layer after Minimals (minimals.cc): loaded after styles.css, changes look only, never
+   layout, so the responsive rules in styles.css keep working. Tokens are defined in styles.css. */
+
+html,
+body {
+  font-size: 14px;
+  line-height: 1.5;
+  letter-spacing: 0;
+}
+h1,
+h2,
+h3 {
+  font-weight: 700;
+  color: var(--text);
+}
+::selection {
+  background: color-mix(in srgb, var(--accent) 24%, transparent);
+}
+:focus-visible {
+  outline-color: var(--accent);
+}
+
+/* --- shell ------------------------------------------------------------------------------------ */
+
+.sidebar {
+  width: 264px;
+  background: var(--bg);
+  border-right: 1px dashed var(--border-strong);
+}
+.sidebar-mobile {
+  background: var(--surface);
+}
+.sidebar-inner {
+  padding: 20px 16px;
+}
+.brand {
+  font-size: 17px;
+  font-weight: 800;
+  padding: 4px 8px 20px;
+  letter-spacing: -0.02em;
+}
+.brand-mark {
+  width: 32px;
+  height: 32px;
+  border-radius: 10px;
+  background: linear-gradient(135deg, #5be49b 0%, #00a76f 55%, #007867 100%);
+  box-shadow: 0 8px 16px -4px rgba(0, 167, 111, 0.4);
+}
+.env-chip {
+  border: 0;
+  background: var(--info-soft);
+  color: var(--info-ink);
+  font-weight: 700;
+  border-radius: 6px;
+  padding: 2px 8px;
+}
+.nav {
+  gap: 8px;
+}
+.nav-label {
+  padding: 16px 12px 8px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: var(--muted);
+}
+.nav-item {
+  height: 44px;
+  padding: 0 12px;
+  gap: 14px;
+  color: var(--text-2);
+  font-weight: 500;
+  font-size: 14px;
+}
+.nav-item:hover {
+  background: var(--surface-hover);
+  color: var(--text);
+}
+.nav-item.active {
+  color: var(--accent);
+  font-weight: 600;
+}
+:root[data-theme="dark"] .nav-item.active {
+  color: var(--accent-text);
+}
+.nav-active {
+  background: var(--accent-soft);
+  box-shadow: none;
+}
+.nav-item.active .nav-icon {
+  color: inherit;
+}
+.nav-icon {
+  width: 22px;
+  height: 22px;
+  padding: 1px;
+}
+.nav-badge {
+  height: 22px;
+  min-width: 24px;
+  border-radius: 6px;
+  font-weight: 700;
+  font-size: 12px;
+}
+.nav-badge.danger {
+  background: var(--danger-soft);
+  color: var(--danger-ink);
+}
+.nav-badge.accent {
+  background: var(--info-soft);
+  color: var(--info-ink);
+}
+.sidebar-foot {
+  margin-top: 16px;
+  padding: 16px 12px;
+  border: 0;
+  border-radius: 12px;
+  background: var(--surface-2);
+}
+
+.topbar {
+  height: 72px;
+  padding: 0 40px;
+  border-bottom: 0;
+  background: color-mix(in srgb, var(--bg) 80%, transparent);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+}
+.crumbs {
+  font-size: 14px;
+}
+.crumb-sep {
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: var(--muted);
+  color: transparent;
+  overflow: hidden;
+}
+.search-trigger {
+  height: 40px;
+  border: 0;
+  border-radius: 10px;
+  background: var(--surface-hover);
+  color: var(--text-2);
+  font-weight: 500;
+}
+.search-trigger:hover {
+  background: color-mix(in srgb, var(--muted) 16%, transparent);
+}
+kbd {
+  border: 0;
+  height: 22px;
+  border-radius: 6px;
+  background: var(--surface);
+  box-shadow: var(--shadow);
+  font-weight: 700;
+  color: var(--text-2);
+}
+.icon-btn {
+  border-radius: 50%;
+}
+.topbar .icon-btn {
+  width: 40px;
+  height: 40px;
+}
+.live {
+  border: 0;
+  height: 30px;
+  background: var(--success-soft);
+  color: var(--success-ink);
+  font-weight: 600;
+}
+.live-label {
+  color: inherit;
+  font-weight: 700;
+}
+.live-time {
+  color: inherit;
+  opacity: 0.75;
+}
+.live-degraded,
+.live-paused {
+  background: var(--warning-soft);
+  color: var(--warning-ink);
+}
+.live-offline {
+  background: var(--danger-soft);
+  color: var(--danger-ink);
+}
+.sidebar-foot .live {
+  background: var(--surface);
+}
+
+.content {
+  max-width: 1320px;
+  padding: 16px 40px 80px;
+}
+.page-head {
+  margin-bottom: 32px;
+}
+.page-head h1 {
+  font-size: 24px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+.page-head p {
+  margin-top: 6px;
+  color: var(--text-2);
+  font-size: 15px;
+}
+
+/* --- surfaces --------------------------------------------------------------------------------- */
+
+.card,
+.table,
+.incident,
+.notif,
+.toast {
+  border: 0;
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+}
+.card {
+  padding: 24px;
+}
+.card-head {
+  margin-bottom: 20px;
+}
+.card-head h3 {
+  font-size: 18px;
+  font-weight: 600;
+}
+.incident:hover,
+.notif:hover {
+  box-shadow: 0 0 2px 0 rgba(145, 158, 171, 0.24), 0 16px 32px -4px rgba(145, 158, 171, 0.24);
+}
+.grid-2,
+.stats {
+  gap: 24px;
+}
+.stack {
+  gap: 24px;
+}
+
+/* Summary widgets: tinted gradient tiles. */
+.stat {
+  border: 0;
+  padding: 24px;
+  gap: 6px;
+  border-radius: var(--radius);
+  box-shadow: none;
+  color: var(--ink, var(--text));
+  background: linear-gradient(135deg, var(--g1, var(--surface)), var(--g2, var(--surface)));
+  isolation: isolate;
+}
+.stat:hover {
+  border: 0;
+  box-shadow: var(--shadow);
+}
+.stat::after {
+  content: "";
+  left: auto;
+  top: -36px;
+  right: -36px;
+  bottom: auto;
+  width: 120px;
+  height: 120px;
+  border-radius: 50%;
+  background: var(--ink, var(--muted));
+  opacity: 0.08;
+  z-index: -1;
+}
+.stat-success {
+  --g1: rgba(119, 237, 139, 0.2);
+  --g2: rgba(34, 197, 94, 0.2);
+  --ink: var(--success-ink);
+}
+.stat-danger {
+  --g1: rgba(255, 172, 130, 0.2);
+  --g2: rgba(255, 86, 48, 0.2);
+  --ink: var(--danger-ink);
+}
+.stat-warning {
+  --g1: rgba(255, 214, 102, 0.2);
+  --g2: rgba(255, 171, 0, 0.2);
+  --ink: var(--warning-ink);
+}
+.stat-accent {
+  --g1: rgba(91, 228, 155, 0.18);
+  --g2: rgba(0, 167, 111, 0.2);
+  --ink: var(--accent-text);
+}
+.stat-neutral {
+  --g1: rgba(97, 243, 243, 0.16);
+  --g2: rgba(0, 184, 217, 0.18);
+  --ink: var(--info-ink);
+}
+.stat .stat-icon {
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--ink) 14%, transparent);
+  color: var(--ink);
+  margin-bottom: 10px;
+}
+.stat .stat-label {
+  color: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  opacity: 0.85;
+}
+.stat .stat-value {
+  font-size: 30px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: inherit;
+}
+.stat .stat-sub {
+  color: inherit;
+  opacity: 0.72;
+}
+
+/* --- labels ----------------------------------------------------------------------------------- */
+
+.badge,
+.pill {
+  height: 24px;
+  padding: 0 8px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0;
+  background: var(--surface-hover);
+  color: var(--text-2);
+}
+.badge-danger,
+.pill-down {
+  background: var(--danger-soft);
+  color: var(--danger-ink);
+}
+.badge-warning {
+  background: var(--warning-soft);
+  color: var(--warning-ink);
+}
+.badge-success,
+.pill-up {
+  background: var(--success-soft);
+  color: var(--success-ink);
+}
+.badge-info {
+  background: var(--info-soft);
+  color: var(--info-ink);
+}
+
+/* --- controls --------------------------------------------------------------------------------- */
+
+.btn {
+  height: 36px;
+  padding: 0 14px;
+  border-radius: 8px;
+  font-weight: 700;
+  border: 1px solid var(--border-strong);
+  background: transparent;
+}
+.btn:hover:not(:disabled) {
+  background: var(--surface-hover);
+  border-color: var(--text);
+}
+.btn-sm {
+  height: 30px;
+  padding: 0 10px;
+  font-size: 13px;
+}
+.btn-primary {
+  background: var(--contained);
+  color: var(--contained-text);
+  border-color: transparent;
+}
+.btn-primary:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--contained) 82%, var(--muted));
+  border-color: transparent;
+  box-shadow: 0 8px 16px 0 rgba(145, 158, 171, 0.24);
+}
+.btn-danger {
+  background: var(--danger);
+  border-color: transparent;
+  color: #fff;
+}
+.btn-danger:hover:not(:disabled) {
+  background: #b71d18;
+  border-color: transparent;
+  box-shadow: 0 8px 16px 0 rgba(255, 86, 48, 0.24);
+}
+.btn-ghost {
+  border-color: transparent;
+}
+.link {
+  color: var(--accent);
+  font-weight: 600;
+}
+:root[data-theme="dark"] .link {
+  color: var(--accent-text);
+}
+
+.search,
+.select,
+.field input,
+.field textarea,
+.field select {
+  border: 1px solid var(--border-strong);
+  border-radius: 8px;
+  background: transparent;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+.search {
+  height: 40px;
+  padding: 0 14px;
+}
+.select {
+  height: 40px;
+  padding: 0 32px 0 12px;
+  background: var(--surface);
+}
+.field input {
+  height: 44px;
+  padding: 0 14px;
+}
+.search:hover,
+.select:hover,
+.field input:hover {
+  border-color: var(--text);
+}
+.search:focus-within,
+.select:focus,
+.field input:focus {
+  border-color: var(--text);
+  box-shadow: inset 0 0 0 1px var(--text);
+  outline: none;
+}
+
+.segmented {
+  padding: 4px;
+  border-radius: 10px;
+  background: var(--surface-hover);
+}
+.segmented button {
+  font-weight: 600;
+}
+.segmented-pill {
+  border-radius: 8px;
+  background: var(--surface);
+  box-shadow: 0 1px 2px rgba(145, 158, 171, 0.16), 0 4px 8px -2px rgba(145, 158, 171, 0.2);
+}
+
+.switch.on {
+  background: var(--accent);
+}
+
+/* --- tables & lists --------------------------------------------------------------------------- */
+
+.table-head {
+  height: 56px;
+  border-bottom: 0;
+  background: var(--surface-2);
+  color: var(--text-2);
+  font-size: 14px;
+  font-weight: 600;
+}
+.table-row {
+  min-height: 72px;
+  border-bottom: 1px dashed var(--border);
+}
+.table-row:hover {
+  background: var(--surface-hover);
+}
+
+.meter-track {
+  height: 8px;
+  background: color-mix(in srgb, var(--muted) 20%, transparent);
+}
+
+/* --- overlays & states ------------------------------------------------------------------------ */
+
+.drawer {
+  background: var(--surface);
+  border-left: 0;
+}
+.modal {
+  border: 0;
+  border-radius: 16px;
+  padding: 24px;
+}
+.callout {
+  border: 0;
+  border-radius: 8px;
+  background: var(--tone-soft);
+  color: var(--text);
+}
+.callout strong {
+  color: var(--tone-ink, var(--text));
+}
+.tone-danger {
+  --tone-ink: var(--danger-ink);
+}
+.tone-warning {
+  --tone-ink: var(--warning-ink);
+}
+.tone-success {
+  --tone-ink: var(--success-ink);
+}
+.tone-info {
+  --tone-ink: var(--info-ink);
+}
+.error-state {
+  border-radius: 8px;
+  background: var(--danger-soft);
+  color: var(--danger-ink);
+}
+.code {
+  border: 0;
+  border-radius: 12px;
+  background: #161c24;
+}
+.empty-icon {
+  border-radius: 16px;
+}
+
+@media (max-width: 640px) {
+  .topbar,
+  .content {
+    padding-left: 16px;
+    padding-right: 16px;
+  }
+  .topbar {
+    height: 64px;
+  }
+  .stat .stat-value {
+    font-size: 24px;
+  }
+}

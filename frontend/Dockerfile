@@ -3,6 +3,9 @@ WORKDIR /app
 COPY package*.json ./
 RUN if [ -f package-lock.json ]; then npm ci; else npm install; fi
 COPY . .
+# Shown on the About page. CI passes the commit SHA; local builds say "local".
+ARG GIT_SHA=local
+ENV GIT_SHA=$GIT_SHA
 RUN npm run build
 
 FROM nginx:1.27-alpine
