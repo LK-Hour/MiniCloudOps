@@ -1,5 +1,6 @@
 # MiniOps CI/CD (docs/MiniCloudOps.md §10)
-#   1. Source validation   2. Automated tests   3. Docker build   4. Publish to GHCR
+#   1. Source validation   2. Automated tests (unit, then integration on the full stack)
+#   3. Docker build        4. Publish to GHCR
 # Stage 5 (local run) is `make deploy` on the demo machine.
 name: CI/CD
 
@@ -70,9 +71,32 @@ jobs:
       - run: npm ci
       - run: npm run build
 
+  integration:
+    name: Integration tests (full stack)
+    needs: test-services
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Start the stack with the sandbox app
+        run: |
+          cp .env.example .env
+          docker compose --profile demo up -d --build --wait --wait-timeout 300 \
+            gateway target-service monitoring-service incident-service notification-service demo-app loki alloy
+      - run: pip install -r tests/requirements.txt
+      - run: python -m pytest -v tests/integration
+      - name: Service logs (on failure)
+        if: failure()
+        run: docker compose --profile demo logs --no-color --tail 200
+      - name: Stop the stack
+        if: always()
+        run: docker compose --profile demo down -v
+
   build-and-publish:
     name: Image ${{ matrix.name }}
-    needs: [test-services, test-frontend]
+    needs: [test-services, test-frontend, integration]
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -117,5 +141,6 @@ jobs:
           push: ${{ github.event_name != 'pull_request' }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+          build-args: GIT_SHA=${{ github.sha }}
           cache-from: type=gha,scope=${{ matrix.name }}
           cache-to: type=gha,mode=max,scope=${{ matrix.name }}
