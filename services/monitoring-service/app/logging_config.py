@@ -51,3 +51,8 @@ def setup_logging(service_name: str, level: str = "INFO") -> None:
         uv_logger = logging.getLogger(name)
         uv_logger.handlers = []
         uv_logger.propagate = True
+
+    # The request middleware already logs each request with its correlation ID, and our own code
+    # logs the outbound calls that matter. These two would only repeat them.
+    logging.getLogger("uvicorn.access").setLevel(logging.WARNING)
+    logging.getLogger("httpx").setLevel(logging.WARNING)

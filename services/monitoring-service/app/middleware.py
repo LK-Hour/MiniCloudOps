@@ -1,8 +1,9 @@
-"""Request middleware: correlation IDs and request logging."""
+"""Request middleware: correlation IDs, request logging and request metrics."""
 import logging
 import time
 import uuid
 
+from prometheus_client import Counter, Histogram
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 
@@ -12,6 +13,19 @@ CORRELATION_HEADER = "X-Correlation-ID"
 _QUIET_PATHS = {"/health", "/health/ready", "/metrics"}
 
 logger = logging.getLogger("app.request")
+
+# Labelled by route template (/api/v1/targets/{target_id}), never the raw path, to bound cardinality.
+API_REQUESTS = Counter(
+    "miniops_api_requests_total", "API requests handled", ["method", "route", "status"]
+)
+API_LATENCY = Histogram(
+    "miniops_api_request_duration_seconds", "API request handling time", ["method", "route"]
+)
+
+
+def _route(request: Request) -> str:
+    route = request.scope.get("route")
+    return getattr(route, "path", None) or "unmatched"
 
 
 class CorrelationIdMiddleware(BaseHTTPMiddleware):
@@ -24,6 +38,9 @@ class CorrelationIdMiddleware(BaseHTTPMiddleware):
         try:
             response = await call_next(request)
             if request.url.path not in _QUIET_PATHS:
+                route = _route(request)
+                API_REQUESTS.labels(request.method, route, str(response.status_code)).inc()
+                API_LATENCY.labels(request.method, route).observe(time.perf_counter() - start)
                 logger.log(
                     logging.ERROR if response.status_code >= 500 else logging.INFO,
                     "Request completed",
@@ -37,6 +54,7 @@ class CorrelationIdMiddleware(BaseHTTPMiddleware):
             response.headers[CORRELATION_HEADER] = correlation_id
             return response
         except Exception:
+            API_REQUESTS.labels(request.method, _route(request), "500").inc()
             logger.exception(
                 "Request failed", extra={"method": request.method, "path": request.url.path}
             )
