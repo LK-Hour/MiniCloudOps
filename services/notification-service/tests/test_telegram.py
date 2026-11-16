@@ -48,7 +48,10 @@ def test_new_notification_is_forwarded(client, sent, configured, make_notificati
     body = json.loads(calls[0].content)
     assert body["chat_id"] == "-1001"
     assert body["parse_mode"] == "HTML"
-    assert body["text"].startswith("🔴 <b>[CRITICAL] Shop &lt;API&gt; is unavailable</b>")
+    header, headline = body["text"].split("\n\n")[:2]
+    assert header == "🔴 <b>CRITICAL · Incident opened</b>"
+    assert headline.startswith("<b>Shop &lt;API&gt; is unavailable</b>")
+    assert body["disable_notification"] is False  # critical alerts make a sound
     assert client.get("/api/v1/notifications/channels").json()["telegram"] == {"enabled": True}
 
 

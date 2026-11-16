@@ -93,7 +93,9 @@ def create_notification(
     key = dedup_key(payload.incident_id, payload.event_type)
     existing = _by_key(db, key)
     if existing is None:
-        notification = Notification(**payload.model_dump(), dedup_key=key, delivery_status="DELIVERED")
+        notification = Notification(
+            **payload.model_dump(exclude={"details"}), dedup_key=key, delivery_status="DELIVERED"
+        )
         db.add(notification)
         try:
             db.commit()
@@ -123,10 +125,12 @@ def create_notification(
     background.add_task(
         telegram.forward,
         notification_id=notification.id,
+        incident_id=notification.incident_id,
         title=notification.title,
         message=notification.message,
         event_type=notification.event_type,
         severity=notification.severity,
+        details=payload.details,
     )
     return notification
 

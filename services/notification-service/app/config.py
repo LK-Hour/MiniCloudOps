@@ -17,6 +17,14 @@ class Settings(BaseSettings):
     telegram_chat_id: str = ""
     # Linked from each Telegram message (empty: no link).
     dashboard_url: str = "http://localhost:3000"
+    # Time zone for times shown in alerts, e.g. Asia/Phnom_Penh (IANA name).
+    alert_timezone: str = "UTC"
+    # Telegram bot commands (/status, /menu, ...) by long polling; needs the token and chat ID too.
+    telegram_commands_enabled: bool = True
+    # The bot reads these services to answer commands.
+    target_service_url: str = "http://target-service:8000"
+    monitoring_service_url: str = "http://monitoring-service:8000"
+    incident_service_url: str = "http://incident-service:8000"
 
 
 @lru_cache

@@ -1,4 +1,6 @@
 """MiniOps Notification Service."""
+import asyncio
+import contextlib
 import logging
 from contextlib import asynccontextmanager
 
@@ -6,6 +8,7 @@ from fastapi import FastAPI, status
 from fastapi.responses import JSONResponse
 from prometheus_client import make_asgi_app
 
+from app import bot, telegram
 from app.config import get_settings
 from app.db import database_is_ready, init_db
 from app.errors import register_error_handlers
@@ -22,7 +25,15 @@ logger = logging.getLogger(__name__)
 async def lifespan(_: FastAPI):
     logger.info("Service starting")
     init_db()
+    # Telegram commands: only with a token and chat ID, and unless TELEGRAM_COMMANDS_ENABLED=false.
+    poller = None
+    if telegram.is_enabled() and settings.telegram_commands_enabled:
+        poller = asyncio.create_task(bot.run(), name="telegram-bot")
     yield
+    if poller:
+        poller.cancel()
+        with contextlib.suppress(asyncio.CancelledError):
+            await poller
     logger.info("Service shutting down")
 
 
