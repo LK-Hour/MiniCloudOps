@@ -1,12 +1,26 @@
 """Request/response models for the Incident Management API."""
+import json
 from datetime import datetime
-from typing import Annotated, Literal
+from typing import Annotated, Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, StringConstraints
+from pydantic import AfterValidator, BaseModel, ConfigDict, Field, StringConstraints
 
 Severity = Literal["CRITICAL", "WARNING", "INFO"]
 IncidentStatus = Literal["OPEN", "ACKNOWLEDGED", "RESOLVED"]
 NonEmpty = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1)]
+
+MAX_CONTEXT_BYTES = 8000
+
+
+def _bounded(value: dict[str, Any] | None) -> dict[str, Any] | None:
+    if value is not None and len(json.dumps(value, default=str)) > MAX_CONTEXT_BYTES:
+        raise ValueError(f"must be at most {MAX_CONTEXT_BYTES} bytes as JSON")
+    return value
+
+
+# Facts from the caller (target, failure kind, latest checks) passed on to the notification.
+# Not stored: the incident record stays the same; only the alert gets richer.
+Context = Annotated[dict[str, Any] | None, AfterValidator(_bounded)]
 
 
 class IncidentCreate(BaseModel):
@@ -14,11 +28,13 @@ class IncidentCreate(BaseModel):
     title: Annotated[NonEmpty, StringConstraints(max_length=200)]
     severity: Severity
     description: str | None = Field(default=None, max_length=2000)
+    context: Context = None
 
 
 class IncidentStatusUpdate(BaseModel):
     status: IncidentStatus
     note: str | None = Field(default=None, max_length=400)
+    context: Context = None
 
 
 class IncidentRead(BaseModel):

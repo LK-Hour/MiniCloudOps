@@ -37,13 +37,15 @@ def test_create_incident(client, notifier):
     assert incident["resolved_at"] is None
     assert response.headers["location"] == f"{API}/{incident['id']}"
 
-    assert notifier.sent == [{
+    assert len(notifier.sent) == 1
+    sent = {k: v for k, v in notifier.sent[0].items() if k != "details"}
+    assert sent == {
         "incident_id": incident["id"],
         "event_type": "INCIDENT_CREATED",
         "severity": "CRITICAL",
         "title": "[CRITICAL] Application unavailable",
         "message": "HTTP health check failed",
-    }]
+    }
     assert events(client, incident["id"]) == ["CREATED", "NOTIFICATION_SENT"]
 
 
@@ -151,3 +153,44 @@ def test_update_unknown_incident_returns_404(client):
 
 def test_history_of_unknown_incident_returns_404(client):
     assert client.get(f"{API}/nope/history").status_code == 404
+
+
+# --- alert details ---------------------------------------------------------------------------------
+
+
+def test_context_is_forwarded_with_timing_but_not_stored(client, notifier):
+    context = {"target_name": "Shop", "failure_kind": "http_5xx", "status_code": 503}
+    response = client.post(
+        API,
+        json={"target_id": "t9", "title": "Shop is unavailable", "severity": "CRITICAL", "context": context},
+    )
+    assert response.status_code == 201
+    assert "context" not in response.json()
+
+    details = notifier.sent[-1]["details"]
+    assert details["failure_kind"] == "http_5xx"
+    assert details["target_name"] == "Shop"
+    assert details["incident_status"] == "OPEN"
+    assert details["started_at"]
+    assert "duration_seconds" not in details
+
+
+def test_resolution_details_include_the_downtime(client, make_incident, notifier):
+    incident = make_incident()
+    client.patch(
+        f"{API}/{incident['id']}/status",
+        json={"status": "RESOLVED", "note": "Recovered", "context": {"status_code": 200}},
+    )
+    details = notifier.sent[-1]["details"]
+    assert details["status_code"] == 200
+    assert details["incident_status"] == "RESOLVED"
+    assert details["resolved_at"]
+    assert details["duration_seconds"] >= 0
+
+
+def test_oversized_context_is_rejected(client):
+    response = client.post(
+        API,
+        json={"target_id": "t9", "title": "Big", "severity": "INFO", "context": {"blob": "x" * 9000}},
+    )
+    assert response.status_code == 422

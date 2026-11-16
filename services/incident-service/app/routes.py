@@ -74,13 +74,19 @@ async def _notify(
     severity: str,
     title: str,
     message: str,
+    details: dict | None = None,
 ) -> None:
     """Background task: tell the Notification Service, then record the outcome in the history."""
     correlation_id_var.set(correlation_id)  # the request's context is gone by the time this runs
     extra = {"incident_id": incident_id, "event_type": event_type}
     try:
         await notifier.send(
-            incident_id=incident_id, event_type=event_type, severity=severity, title=title, message=message
+            incident_id=incident_id,
+            event_type=event_type,
+            severity=severity,
+            title=title,
+            message=message,
+            details=details,
         )
         event = IncidentEvent(incident_id=incident_id, event_type="NOTIFICATION_SENT", message=event_type)
         logger.info("Notification sent", extra=extra)
@@ -98,6 +104,24 @@ async def _notify(
             db.commit()
     except SQLAlchemyError:
         logger.exception("Could not record notification outcome", extra=extra)
+
+
+def _timing(incident: Incident) -> dict:
+    """When the incident started and, once resolved, how long it lasted."""
+    timing = {"incident_status": incident.status, "started_at": _iso(incident.created_at)}
+    if incident.resolved_at:
+        timing["resolved_at"] = _iso(incident.resolved_at)
+        lasted = _aware(incident.resolved_at) - _aware(incident.created_at)
+        timing["duration_seconds"] = round(lasted.total_seconds())
+    return timing
+
+
+def _aware(moment: datetime) -> datetime:
+    return moment if moment.tzinfo else moment.replace(tzinfo=UTC)  # SQLite drops the zone
+
+
+def _iso(moment: datetime) -> str:
+    return _aware(moment).isoformat()
 
 
 @router.get("", response_model=list[IncidentRead])
@@ -138,7 +162,7 @@ def create_incident(
 ):
     existing = _active_incident(db, payload.target_id)
     if existing is None:
-        incident = Incident(**payload.model_dump(), status="OPEN")
+        incident = Incident(**payload.model_dump(exclude={"context"}), status="OPEN")
         db.add(incident)
         db.flush()  # assigns the id for the event below
         db.add(IncidentEvent(incident_id=incident.id, event_type="CREATED", message=payload.title))
@@ -173,6 +197,7 @@ def create_incident(
         severity=incident.severity,
         title=f"[{incident.severity}] {incident.title}",
         message=incident.description or incident.title,
+        details={**(payload.context or {}), **_timing(incident)},
     )
     return incident
 
@@ -220,6 +245,7 @@ def update_incident_status(
             severity=incident.severity,
             title=f"[RESOLVED] {incident.title}",
             message=payload.note or "The incident has been resolved.",
+            details={**(payload.context or {}), **_timing(incident)},
         )
     return incident
 

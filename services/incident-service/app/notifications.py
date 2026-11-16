@@ -14,7 +14,14 @@ class NotificationClient:
         self.api = f"{base_url.rstrip('/')}/api/v1/notifications"
 
     async def send(
-        self, *, incident_id: str, event_type: str, severity: str, title: str, message: str
+        self,
+        *,
+        incident_id: str,
+        event_type: str,
+        severity: str,
+        title: str,
+        message: str,
+        details: dict | None = None,
     ) -> None:
         payload = {
             "incident_id": incident_id,
@@ -22,6 +29,7 @@ class NotificationClient:
             "severity": severity,
             "title": title[:200],
             "message": message,
+            "details": details,
         }
         try:
             response = await request_with_retry("POST", self.api, json=payload)
