@@ -18,6 +18,10 @@ scrape_configs:
           - monitoring-service:8000
           - incident-service:8000
           - notification-service:8000
+    relabel_configs:  # service="target-service" etc., for per-service dashboard panels
+      - source_labels: [__address__]
+        regex: "([^:]+):.*"
+        target_label: service
 
   - job_name: cadvisor
     static_configs:

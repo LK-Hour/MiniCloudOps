@@ -2,7 +2,7 @@
   "uid": "miniops-overview",
   "title": "MiniOps Overview",
   "schemaVersion": 39,
-  "version": 1,
+  "version": 2,
   "editable": true,
   "refresh": "15s",
   "time": {
@@ -15,17 +15,30 @@
   "panels": [
     {
       "id": 1,
-      "title": "Active targets",
-      "type": "stat",
-      "datasource": {
-        "type": "prometheus",
-        "uid": "prometheus"
-      },
+      "type": "row",
+      "title": "Overview",
       "gridPos": {
         "x": 0,
         "y": 0,
-        "w": 6,
+        "w": 24,
+        "h": 1
+      },
+      "collapsed": false,
+      "panels": []
+    },
+    {
+      "id": 2,
+      "type": "stat",
+      "title": "Active targets",
+      "gridPos": {
+        "x": 0,
+        "y": 1,
+        "w": 4,
         "h": 4
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
       },
       "targets": [
         {
@@ -36,21 +49,25 @@
           },
           "expr": "sum(miniops_active_targets)"
         }
-      ]
+      ],
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      }
     },
     {
-      "id": 2,
-      "title": "Open incidents",
+      "id": 3,
       "type": "stat",
+      "title": "Open incidents",
+      "gridPos": {
+        "x": 4,
+        "y": 1,
+        "w": 4,
+        "h": 4
+      },
       "datasource": {
         "type": "prometheus",
         "uid": "prometheus"
-      },
-      "gridPos": {
-        "x": 6,
-        "y": 0,
-        "w": 6,
-        "h": 4
       },
       "targets": [
         {
@@ -61,21 +78,39 @@
           },
           "expr": "sum(miniops_open_incidents)"
         }
-      ]
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 1
+              }
+            ]
+          }
+        },
+        "overrides": []
+      }
     },
     {
-      "id": 3,
-      "title": "Health-check failures (5m)",
+      "id": 4,
       "type": "stat",
+      "title": "Check failures (5m)",
+      "gridPos": {
+        "x": 8,
+        "y": 1,
+        "w": 4,
+        "h": 4
+      },
       "datasource": {
         "type": "prometheus",
         "uid": "prometheus"
-      },
-      "gridPos": {
-        "x": 12,
-        "y": 0,
-        "w": 6,
-        "h": 4
       },
       "targets": [
         {
@@ -86,22 +121,59 @@
           },
           "expr": "sum(increase(miniops_health_check_failures_total[5m]))"
         }
-      ]
+      ],
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      }
     },
     {
-      "id": 4,
-      "title": "Services up",
+      "id": 5,
       "type": "stat",
+      "title": "Availability (1h)",
+      "gridPos": {
+        "x": 12,
+        "y": 1,
+        "w": 4,
+        "h": 4
+      },
       "datasource": {
         "type": "prometheus",
         "uid": "prometheus"
       },
+      "description": "Share of health checks that passed, across all targets.",
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "1 - sum(increase(miniops_health_check_failures_total[1h])) / sum(increase(miniops_health_check_total[1h]))"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit"
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 6,
+      "type": "stat",
+      "title": "MiniOps services up",
       "gridPos": {
-        "x": 18,
-        "y": 0,
-        "w": 6,
+        "x": 16,
+        "y": 1,
+        "w": 4,
         "h": 4
       },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "description": "Out of 4: Target, Monitoring, Incident, Notification.",
       "targets": [
         {
           "refId": "A",
@@ -111,21 +183,25 @@
           },
           "expr": "sum(up{job=\"miniops-services\"})"
         }
-      ]
+      ],
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      }
     },
     {
-      "id": 5,
-      "title": "Target response time (p95)",
-      "type": "timeseries",
+      "id": 7,
+      "type": "stat",
+      "title": "API requests / s",
+      "gridPos": {
+        "x": 20,
+        "y": 1,
+        "w": 4,
+        "h": 4
+      },
       "datasource": {
         "type": "prometheus",
         "uid": "prometheus"
-      },
-      "gridPos": {
-        "x": 0,
-        "y": 4,
-        "w": 12,
-        "h": 8
       },
       "targets": [
         {
@@ -134,8 +210,52 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "histogram_quantile(0.95, sum by (le, target_id) (rate(miniops_http_response_time_seconds_bucket[5m])))",
-          "legendFormat": "{{target_id}}"
+          "expr": "sum(rate(miniops_api_requests_total[5m]))"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps"
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 8,
+      "type": "row",
+      "title": "Monitored targets",
+      "gridPos": {
+        "x": 0,
+        "y": 5,
+        "w": 24,
+        "h": 1
+      },
+      "collapsed": false,
+      "panels": []
+    },
+    {
+      "id": 9,
+      "type": "timeseries",
+      "title": "Response time (p95)",
+      "gridPos": {
+        "x": 0,
+        "y": 6,
+        "w": 8,
+        "h": 8
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "histogram_quantile(0.95, sum by (le, target_id) (rate(miniops_http_response_time_seconds_bucket[5m]))) * on (target_id) group_left (name) max by (target_id, name) (miniops_target_info)",
+          "legendFormat": "{{name}}"
         }
       ],
       "fieldConfig": {
@@ -146,18 +266,18 @@
       }
     },
     {
-      "id": 6,
-      "title": "Health checks per minute",
+      "id": 10,
       "type": "timeseries",
+      "title": "Availability (5m window)",
+      "gridPos": {
+        "x": 8,
+        "y": 6,
+        "w": 8,
+        "h": 8
+      },
       "datasource": {
         "type": "prometheus",
         "uid": "prometheus"
-      },
-      "gridPos": {
-        "x": 12,
-        "y": 4,
-        "w": 12,
-        "h": 8
       },
       "targets": [
         {
@@ -166,24 +286,185 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum by (target_id) (rate(miniops_health_check_total[1m])) * 60",
-          "legendFormat": "{{target_id}}"
+          "expr": "(1 - sum by (target_id) (increase(miniops_health_check_failures_total[5m])) / sum by (target_id) (increase(miniops_health_check_total[5m]))) * on (target_id) group_left (name) max by (target_id, name) (miniops_target_info)",
+          "legendFormat": "{{name}}"
         }
-      ]
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "min": 0,
+          "max": 1
+        },
+        "overrides": []
+      }
     },
     {
-      "id": 7,
-      "title": "Container CPU %",
+      "id": 11,
       "type": "timeseries",
+      "title": "Health checks per minute",
+      "gridPos": {
+        "x": 16,
+        "y": 6,
+        "w": 8,
+        "h": 8
+      },
       "datasource": {
         "type": "prometheus",
         "uid": "prometheus"
       },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum by (target_id) (rate(miniops_health_check_total[1m])) * 60 * on (target_id) group_left (name) max by (target_id, name) (miniops_target_info)",
+          "legendFormat": "{{name}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      }
+    },
+    {
+      "id": 12,
+      "type": "row",
+      "title": "MiniOps APIs",
       "gridPos": {
         "x": 0,
-        "y": 12,
+        "y": 14,
+        "w": 24,
+        "h": 1
+      },
+      "collapsed": false,
+      "panels": []
+    },
+    {
+      "id": 13,
+      "type": "timeseries",
+      "title": "Request rate by service",
+      "gridPos": {
+        "x": 0,
+        "y": 15,
+        "w": 8,
+        "h": 8
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum by (service) (rate(miniops_api_requests_total[1m]))",
+          "legendFormat": "{{service}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps"
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 14,
+      "type": "timeseries",
+      "title": "Request latency p95 by service",
+      "gridPos": {
+        "x": 8,
+        "y": 15,
+        "w": 8,
+        "h": 8
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "histogram_quantile(0.95, sum by (le, service) (rate(miniops_api_request_duration_seconds_bucket[5m])))",
+          "legendFormat": "{{service}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s"
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 15,
+      "type": "timeseries",
+      "title": "Server errors (5xx) by service",
+      "gridPos": {
+        "x": 16,
+        "y": 15,
+        "w": 8,
+        "h": 8
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "description": "Should stay at zero. A rise means a service is failing requests: open the logs below.",
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum by (service) (rate(miniops_api_requests_total{status=~\"5..\"}[5m]))",
+          "legendFormat": "{{service}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps"
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 16,
+      "type": "row",
+      "title": "Containers",
+      "gridPos": {
+        "x": 0,
+        "y": 23,
+        "w": 24,
+        "h": 1
+      },
+      "collapsed": false,
+      "panels": []
+    },
+    {
+      "id": 17,
+      "type": "timeseries",
+      "title": "Container CPU %",
+      "gridPos": {
+        "x": 0,
+        "y": 24,
         "w": 12,
         "h": 8
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
       },
       "targets": [
         {
@@ -204,18 +485,18 @@
       }
     },
     {
-      "id": 8,
-      "title": "Container memory",
+      "id": 18,
       "type": "timeseries",
+      "title": "Container memory",
+      "gridPos": {
+        "x": 12,
+        "y": 24,
+        "w": 12,
+        "h": 8
+      },
       "datasource": {
         "type": "prometheus",
         "uid": "prometheus"
-      },
-      "gridPos": {
-        "x": 12,
-        "y": 12,
-        "w": 12,
-        "h": 8
       },
       "targets": [
         {
@@ -236,19 +517,33 @@
       }
     },
     {
-      "id": 9,
-      "title": "Service errors (Loki)",
+      "id": 19,
+      "type": "row",
+      "title": "Logs",
+      "gridPos": {
+        "x": 0,
+        "y": 32,
+        "w": 24,
+        "h": 1
+      },
+      "collapsed": false,
+      "panels": []
+    },
+    {
+      "id": 20,
       "type": "logs",
+      "title": "Warnings and errors (Loki)",
+      "gridPos": {
+        "x": 0,
+        "y": 33,
+        "w": 24,
+        "h": 10
+      },
       "datasource": {
         "type": "loki",
         "uid": "loki"
       },
-      "gridPos": {
-        "x": 0,
-        "y": 20,
-        "w": 24,
-        "h": 10
-      },
+      "description": "Filter by correlation ID in Explore to follow one request across services.",
       "targets": [
         {
           "refId": "A",
@@ -256,9 +551,19 @@
             "type": "loki",
             "uid": "loki"
           },
-          "expr": "{level=\"ERROR\"}"
+          "expr": "{compose_project=\"miniops\", level=~\"WARNING|ERROR|CRITICAL\"}"
         }
-      ]
+      ],
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "options": {
+        "showTime": true,
+        "wrapLogMessage": true,
+        "sortOrder": "Descending",
+        "enableLogDetails": true
+      }
     }
   ],
   "templating": {
