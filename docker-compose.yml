@@ -36,6 +36,7 @@ services:
       DEFAULT_CHECK_INTERVAL_SECONDS: ${DEFAULT_CHECK_INTERVAL_SECONDS:-30}
       FAILURE_THRESHOLD: ${FAILURE_THRESHOLD:-3}
       RESPONSE_TIME_THRESHOLD_MS: ${RESPONSE_TIME_THRESHOLD_MS:-2000}
+      SSRF_ALLOW_PRIVATE_NETWORKS: ${SSRF_ALLOW_PRIVATE_NETWORKS:-true}
 
   incident-service:
     <<: *service-defaults
@@ -55,6 +56,10 @@ services:
       SERVICE_NAME: notification-service
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
       DATABASE_URL: postgresql+psycopg://${NOTIFICATION_DB_USER}:${NOTIFICATION_DB_PASSWORD}@postgres:5432/notification_db
+      # Optional Telegram alerts: set both in .env (empty = dashboard only).
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
+      TELEGRAM_CHAT_ID: ${TELEGRAM_CHAT_ID:-}
+      DASHBOARD_URL: http://localhost:${FRONTEND_PORT:-3000}
 
   # ---------- Edge (published to localhost) ----------
   gateway:
@@ -73,7 +78,10 @@ services:
 
   frontend:
     image: ghcr.io/${GHCR_OWNER:-miniops}/miniops-frontend:${IMAGE_TAG:-latest}
-    build: ./frontend
+    build:
+      context: ./frontend
+      args:
+        GIT_SHA: ${GIT_SHA:-local}
     restart: unless-stopped
     ports:
       - "${FRONTEND_PORT:-3000}:80"
@@ -179,12 +187,24 @@ services:
       - /:/host:ro,rslave
     networks: [internal]
 
-  # ---------- Demo target to monitor ----------
+  # ---------- Demo Lab sandbox (opt-in: make demo) ----------
+  # An app whose health the dashboard's Demo Lab breaks on purpose (outages, latency, errors).
+  # Standard-library Python mounted into the stock image: nothing to build.
   demo-app:
-    image: nginx:1.27-alpine
-    restart: "no"
+    image: python:3.12-slim
+    command: ["python", "-u", "/app/lab.py"]
+    user: "65534:65534"
+    restart: unless-stopped
+    read_only: true
+    volumes:
+      - ./demo-app/lab.py:/app/lab.py:ro
     networks: [internal]
     profiles: [demo]
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1/lab/health', timeout=2)"]
+      interval: 15s
+      timeout: 3s
+      retries: 3
 
 networks:
   internal:

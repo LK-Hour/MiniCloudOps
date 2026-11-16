@@ -1,7 +1,7 @@
 SERVICES := target-service monitoring-service incident-service notification-service
 COMPOSE  := docker compose
 
-.PHONY: help env up down build pull deploy logs ps health test lint integration clean
+.PHONY: help env up demo down build pull deploy logs ps health test lint integration clean
 
 help: ## Show available commands
 	@grep -E '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  %-12s %s\n", $$1, $$2}'
@@ -12,8 +12,11 @@ env: ## Create .env from .env.example (if missing)
 up: env ## Build from source and start the full stack
 	$(COMPOSE) up -d --build
 
+demo: env ## Start the stack plus the Demo Lab sandbox (demo-app)
+	$(COMPOSE) --profile demo up -d --build
+
 down: ## Stop the stack (keeps data volumes)
-	$(COMPOSE) down
+	$(COMPOSE) --profile demo down
 
 build: ## Build all images
 	$(COMPOSE) build
@@ -45,4 +48,4 @@ integration: ## Run integration tests against the running stack
 	python -m pytest -q tests/integration
 
 clean: ## Stop the stack AND delete all data volumes
-	$(COMPOSE) down -v
+	$(COMPOSE) --profile demo down -v
